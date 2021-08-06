@@ -1,5 +1,5 @@
 use std::ffi::CStr;
-use wasmedge_sys::{ffi as we_ffi, WasmEdge_VersionGetMajor};
+use wasmedge_sys::ffi as we_ffi;
 
 pub fn version() -> String {
     let c_buf = unsafe { we_ffi::WasmEdge_VersionGet() };
