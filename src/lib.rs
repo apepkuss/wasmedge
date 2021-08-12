@@ -5,7 +5,7 @@ use std::fmt;
 use std::mem;
 use std::path::Path;
 use std::ptr;
-use wasmedge_sys::ffi::{self as we_ffi};
+use wasmedge_sys::ffi as we_ffi;
 
 pub type WasmEdgeValue = we_ffi::WasmEdge_Value;
 
@@ -203,7 +203,7 @@ impl WasmEdgeVMContext {
         buf: &[u8],
         func_name: &str,
         params: &[WasmEdgeValue],
-        out: &'vm mut [mem::MaybeUninit<WasmEdgeValue>],
+        returns: &'vm mut [mem::MaybeUninit<WasmEdgeValue>],
     ) -> WasmEdgeResult<&'vm [WasmEdgeValue]> {
         let func_name = WasmEdgeString::from_str(func_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", func_name).as_str());
@@ -216,15 +216,51 @@ impl WasmEdgeVMContext {
                 func_name.raw,
                 params.as_ptr() as *const WasmEdgeValue,
                 params.len() as u32,
-                out.as_mut_ptr() as *mut WasmEdgeValue,
-                out.len() as u32,
+                returns.as_mut_ptr() as *mut WasmEdgeValue,
+                returns.len() as u32,
             ));
 
             match result {
-                Ok(_) => Ok(mem::MaybeUninit::slice_assume_init_ref(&out[..out.len()])),
+                Ok(_) => Ok(mem::MaybeUninit::slice_assume_init_ref(
+                    &returns[..returns.len()],
+                )),
                 Err(err) => Err(err),
             }
         }
+    }
+
+    pub fn function_type(&self, func_name: &str) -> Option<WasmEdgeFunctionTypeContext> {
+        let func_name = WasmEdgeString::from_str(func_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", func_name).as_str());
+        let result = unsafe { we_ffi::WasmEdge_VMGetFunctionType(self.raw, func_name.raw) };
+        if result.is_null() {
+            return None;
+        }
+
+        Some(WasmEdgeFunctionTypeContext { raw: result })
+    }
+
+    pub fn function_type_registered(
+        &self,
+        mod_name: &str,
+        func_name: &str,
+    ) -> Option<WasmEdgeFunctionTypeContext> {
+        let mod_name = WasmEdgeString::from_str(mod_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
+        let func_name = WasmEdgeString::from_str(func_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", func_name).as_str());
+        let result = unsafe {
+            we_ffi::WasmEdge_VMGetFunctionTypeRegistered(self.raw, mod_name.raw, func_name.raw)
+        };
+        if result.is_null() {
+            return None;
+        }
+
+        Some(WasmEdgeFunctionTypeContext { raw: result })
+    }
+
+    pub fn function_list_len(&self) -> usize {
+        unsafe { we_ffi::WasmEdge_VMGetFunctionListLength(self.raw) as usize }
     }
 }
 impl Drop for WasmEdgeVMContext {
@@ -340,11 +376,21 @@ impl WasmEdgeFunctionTypeContext {
         unsafe { we_ffi::WasmEdge_FunctionTypeGetReturnsLength(self.raw) as usize }
     }
 
-    pub fn returns(&self, list: &mut [WasmEdgeValType]) -> usize {
-        unsafe {
-            we_ffi::WasmEdge_FunctionTypeGetReturns(self.raw, list.as_mut_ptr(), list.len() as u32)
-                as usize
-        }
+    pub fn returns<'val>(
+        &self,
+        list: &'val mut [mem::MaybeUninit<WasmEdgeValType>],
+    ) -> (usize, &'val [WasmEdgeValType]) {
+        let length = unsafe {
+            we_ffi::WasmEdge_FunctionTypeGetReturns(
+                self.raw,
+                list.as_mut_ptr() as *mut WasmEdgeValType,
+                list.len() as u32,
+            ) as usize
+        };
+
+        (length, unsafe {
+            mem::MaybeUninit::slice_assume_init_ref(&list[..list.len()])
+        })
     }
 
     pub fn into_raw(&self) -> *mut we_ffi::WasmEdge_FunctionTypeContext {
@@ -608,5 +654,19 @@ mod tests {
         let values = result.unwrap();
         assert_eq!(values.len(), 1);
         assert_eq!(WasmEdgeValueGetI32(values[0]), 6912);
+
+        let result = vm_ctx.function_type("addTwo");
+        assert!(result.is_some());
+        let func_type = result.unwrap();
+
+        println!("len of returns: {}", func_type.returns_len());
+        println!("len of params: {}", func_type.parameters_len());
+
+        // let mut list: Vec<WasmEdgeValType> = vec![];
+        let mut out: [mem::MaybeUninit<WasmEdgeValType>; 1] = mem::MaybeUninit::uninit_array();
+        let (size, list) = func_type.returns(&mut out);
+        println!("size of returns: {}", size);
+        println!("len of list: {}", list.len());
+        println!("result value: {:?}", list[0]);
     }
 }
