@@ -75,10 +75,14 @@ pub struct WasmEdgeConfigureContext {
     raw: *mut we_ffi::WasmEdge_ConfigureContext,
 }
 impl WasmEdgeConfigureContext {
-    pub fn new() -> WasmEdgeConfigureContext {
+    pub fn create() -> WasmEdgeConfigureContext {
         WasmEdgeConfigureContext {
             raw: unsafe { we_ffi::WasmEdge_ConfigureCreate() },
         }
+    }
+
+    pub fn add_host_registration(&mut self, host: WasmEdgeHostRegistration) {
+        unsafe { we_ffi::WasmEdge_ConfigureAddHostRegistration(self.raw, host) }
     }
 }
 impl Drop for WasmEdgeConfigureContext {
@@ -165,6 +169,23 @@ impl WasmEdgeVMContext {
         }
     }
 
+    pub fn register_module_from_file<P: AsRef<Path>>(
+        &mut self,
+        mod_name: &str,
+        path: P,
+    ) -> WasmEdgeResult<u32> {
+        let mod_name = WasmEdgeString::from_str(mod_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
+        let path = path_to_cstring(path.as_ref())?;
+        unsafe {
+            check(we_ffi::WasmEdge_VMRegisterModuleFromFile(
+                self.raw,
+                mod_name.raw,
+                path.as_ptr(),
+            ))
+        }
+    }
+
     pub fn run_wasm_from_file<'vm, P: AsRef<Path>>(
         &mut self,
         path: P,
@@ -174,8 +195,6 @@ impl WasmEdgeVMContext {
     ) -> WasmEdgeResult<&'vm [WasmEdgeValue]> {
         let path = path_to_cstring(path.as_ref())?;
         unsafe {
-            // let funcname =
-            //     we_ffi::WasmEdge_StringCreateByCString(CString::new(func_name)?.as_ptr());
             let func_name = WasmEdgeString::from_str(func_name)
                 .expect(format!("Failed to create WasmEdgeString from '{}'", func_name).as_str());
 
@@ -188,8 +207,6 @@ impl WasmEdgeVMContext {
                 buf.as_mut_ptr() as *mut WasmEdgeValue,
                 buf.len() as u32,
             ));
-
-            // we_ffi::WasmEdge_StringDelete(funcname);
 
             match result {
                 Ok(_) => Ok(mem::MaybeUninit::slice_assume_init_ref(&buf[..buf.len()])),
@@ -437,6 +454,12 @@ impl WasmEdgeImportObjectContext {
         }
     }
 
+    pub fn create_tensorflow_import_object() -> WasmEdgeImportObjectContext {
+        WasmEdgeImportObjectContext {
+            raw: unsafe { we_ffi::WasmEdge_Tensorflow_ImportObjectCreate() },
+        }
+    }
+
     pub fn add_host_function(
         &mut self,
         name: &str,
@@ -550,6 +573,7 @@ impl Drop for WasmEdgeGlobalInstanceContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // use std::path::Path;
 
     #[test]
     fn test_version() {
@@ -561,7 +585,7 @@ mod tests {
 
     #[test]
     fn test_wasmedge_vm_run_wasm_from_file() {
-        let mut conf_ctx = WasmEdgeConfigureContext::new();
+        let mut conf_ctx = WasmEdgeConfigureContext::create();
         add_host_registration(
             &mut conf_ctx,
             WasmEdgeHostRegistration::WasmEdge_HostRegistration_Wasi,
@@ -585,6 +609,24 @@ mod tests {
         let values = result.unwrap();
         assert_eq!(values.len(), 1);
         assert_eq!(WasmEdgeValueGetI32(values[0]), 10);
+    }
+
+    #[test]
+    fn test_wasmedge_tensorflow() {
+        let mut conf_ctx = WasmEdgeConfigureContext::create();
+        conf_ctx.add_host_registration(WasmEdgeHostRegistration::WasmEdge_HostRegistration_Wasi);
+        conf_ctx.add_host_registration(
+            WasmEdgeHostRegistration::WasmEdge_HostRegistration_WasmEdge_Process,
+        );
+        let mut vm_ctx = WasmEdgeVMContext::create(Some(&conf_ctx), None);
+
+        let tensorflow_mod = WasmEdgeImportObjectContext::create_tensorflow_import_object();
+        let result = vm_ctx.register_module_from_import(&tensorflow_mod);
+        assert!(result.is_ok());
+
+        let result = vm_ctx
+            .function_type_registered("wasmedge_tensorflow", "wasmedge_tensorflow_create_session");
+        assert!(result.is_some());
     }
 
     #[test]
@@ -669,4 +711,48 @@ mod tests {
         println!("len of list: {}", list.len());
         println!("result value: {:?}", list[0]);
     }
+
+    // #[test]
+    // fn test_wasmedge_run_wasm() {
+    //     // create VM    turning on the Wasi support
+    //     let mut config_ctx = WasmEdgeConfigureContext::create();
+    //     config_ctx.add_host_registration(
+    //         we_ffi::WasmEdge_HostRegistration::WasmEdge_HostRegistration_Wasi,
+    //     );
+    //     let mut vm_ctx = WasmEdgeVMContext::create(Some(&config_ctx), None);
+
+    //     // let mut vm_ctx = WasmEdgeVMContext::create(None, None);
+
+    //     // * register wasm_calc.wasm
+    //     // register the wasm module into vm
+    //     let res = vm_ctx.register_module_from_file(
+    //         "calculator",
+    //         "/root/workspace/wasmedge-ml/wasmedge/tfrs.wasm",
+    //     );
+    //     assert!(res.is_ok());
+
+    //     // * run consume_add function in using_add.wasm
+    //     let buf = std::fs::read("/root/workspace/wasmedge-ml/wasmedge/add.pb").unwrap();
+    //     let vec = [&buf];
+    //     let ptr = vec.as_ptr();
+    //     let ptr = ptr as i64;
+
+    //     let params = vec![WasmEdgeValueGenI64(ptr), WasmEdgeValueGenI32(1)];
+    //     let mut out: [mem::MaybeUninit<WasmEdgeValue>; 1] = mem::MaybeUninit::uninit_array();
+
+    //     // Run the WASM function from file.
+    //     let result = vm_ctx.run_wasm_from_file(
+    //         Path::new("/root/workspace/wasmedge-ml/wasmedge/using_add.wasm")
+    //             .canonicalize()
+    //             .unwrap(),
+    //         "consume_load",
+    //         params.as_slice(),
+    //         &mut out,
+    //     );
+    //     assert!(result.is_ok());
+
+    //     let values = result.unwrap();
+    //     assert_eq!(values.len(), 1);
+    //     assert_eq!(WasmEdgeValueGetI32(values[0]), 1);
+    // }
 }
