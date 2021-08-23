@@ -612,24 +612,6 @@ mod tests {
     }
 
     #[test]
-    fn test_wasmedge_tensorflow() {
-        let mut conf_ctx = WasmEdgeConfigureContext::create();
-        conf_ctx.add_host_registration(WasmEdgeHostRegistration::WasmEdge_HostRegistration_Wasi);
-        conf_ctx.add_host_registration(
-            WasmEdgeHostRegistration::WasmEdge_HostRegistration_WasmEdge_Process,
-        );
-        let mut vm_ctx = WasmEdgeVMContext::create(Some(&conf_ctx), None);
-
-        let tensorflow_mod = WasmEdgeImportObjectContext::create_tensorflow_import_object();
-        let result = vm_ctx.register_module_from_import(&tensorflow_mod);
-        assert!(result.is_ok());
-
-        let result = vm_ctx
-            .function_type_registered("wasmedge_tensorflow", "wasmedge_tensorflow_create_session");
-        assert!(result.is_some());
-    }
-
-    #[test]
     fn test_wasmedge_host_function() {
         #[no_mangle]
         unsafe extern "C" fn Add(
@@ -712,6 +694,53 @@ mod tests {
         println!("result value: {:?}", list[0]);
     }
 
+    #[test]
+    fn test_wasmedge_tensorflow() {
+        let mut conf_ctx = WasmEdgeConfigureContext::create();
+        conf_ctx.add_host_registration(WasmEdgeHostRegistration::WasmEdge_HostRegistration_Wasi);
+        conf_ctx.add_host_registration(
+            WasmEdgeHostRegistration::WasmEdge_HostRegistration_WasmEdge_Process,
+        );
+        let mut vm_ctx = WasmEdgeVMContext::create(Some(&conf_ctx), None);
+
+        // create tensorflow module: mod name: "wasmedge_tensorflow"
+        let tensorflow_mod = WasmEdgeImportObjectContext::create_tensorflow_import_object();
+        let result = vm_ctx.register_module_from_import(&tensorflow_mod);
+        assert!(result.is_ok());
+        // check the registered function
+        let result = vm_ctx
+            .function_type_registered("wasmedge_tensorflow", "wasmedge_tensorflow_create_session");
+        assert!(result.is_some());
+
+        // register wasmedge-wasi-nn module
+        let result = vm_ctx.register_module_from_file(
+            "calculator",
+            "/root/workspace/wasmedge-ml/target/wasm32-wasi/debug/wasmedge_wasi_nn.wasm",
+        );
+        assert!(result.is_ok());
+
+        // load tensorflow model
+        let buf = std::fs::read("/root/workspace/wasmedge-ml/docs/add.pb").unwrap();
+        let vec = [&buf];
+        let ptr = vec.as_ptr();
+        let ptr = ptr as i64;
+
+        // run target wasm module
+        let params = vec![WasmEdgeValueGenI64(ptr), WasmEdgeValueGenI32(1)];
+        let mut out: [mem::MaybeUninit<WasmEdgeValue>; 1] = mem::MaybeUninit::uninit_array();
+        let result = vm_ctx.run_wasm_from_file(
+            "/root/workspace/wasmedge-ml/docs/using_add.wasm",
+            "consume_load",
+            params.as_slice(),
+            &mut out,
+        );
+        assert!(result.is_ok());
+
+        let values = result.unwrap();
+        assert_eq!(values.len(), 1);
+        assert_eq!(WasmEdgeValueGetI32(values[0]), 101);
+    }
+
     // #[test]
     // fn test_wasmedge_run_wasm() {
     //     // create VM    turning on the Wasi support
@@ -727,12 +756,12 @@ mod tests {
     //     // register the wasm module into vm
     //     let res = vm_ctx.register_module_from_file(
     //         "calculator",
-    //         "/root/workspace/wasmedge-ml/wasmedge/tfrs.wasm",
+    //         "/root/workspace/wasmedge-ml/target/wasm32-wasi/debug/wasmedge_wasi_nn.wasm",
     //     );
     //     assert!(res.is_ok());
 
     //     // * run consume_add function in using_add.wasm
-    //     let buf = std::fs::read("/root/workspace/wasmedge-ml/wasmedge/add.pb").unwrap();
+    //     let buf = std::fs::read("/root/workspace/wasmedge-ml/docs/add.pb").unwrap();
     //     let vec = [&buf];
     //     let ptr = vec.as_ptr();
     //     let ptr = ptr as i64;
@@ -742,7 +771,7 @@ mod tests {
 
     //     // Run the WASM function from file.
     //     let result = vm_ctx.run_wasm_from_file(
-    //         Path::new("/root/workspace/wasmedge-ml/wasmedge/using_add.wasm")
+    //         Path::new("/root/workspace/wasmedge-ml/docs/using_add.wasm")
     //             .canonicalize()
     //             .unwrap(),
     //         "consume_load",
