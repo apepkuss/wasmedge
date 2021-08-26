@@ -2,6 +2,7 @@
 
 use std::ffi::{CStr, CString};
 use std::fmt;
+use std::marker::PhantomData;
 use std::mem;
 use std::path::Path;
 use std::ptr;
@@ -71,21 +72,27 @@ pub fn version_patch() -> usize {
     patch as usize
 }
 
-pub struct WasmEdgeConfigureContext {
+pub type WasmEdgeProposal = we_ffi::WasmEdge_Proposal;
+
+pub struct ConfigureContext {
     raw: *mut we_ffi::WasmEdge_ConfigureContext,
 }
-impl WasmEdgeConfigureContext {
-    pub fn create() -> WasmEdgeConfigureContext {
-        WasmEdgeConfigureContext {
+impl ConfigureContext {
+    pub fn create() -> ConfigureContext {
+        ConfigureContext {
             raw: unsafe { we_ffi::WasmEdge_ConfigureCreate() },
         }
     }
 
-    pub fn add_host_registration(&mut self, host: WasmEdgeHostRegistration) {
+    pub fn add_host_registration(&mut self, host: HostRegistration) {
         unsafe { we_ffi::WasmEdge_ConfigureAddHostRegistration(self.raw, host) }
     }
+
+    pub fn add_proposal(&mut self, prop: WasmEdgeProposal) {
+        unsafe { we_ffi::WasmEdge_ConfigureAddProposal(self.raw, prop) }
+    }
 }
-impl Drop for WasmEdgeConfigureContext {
+impl Drop for ConfigureContext {
     fn drop(&mut self) {
         if !self.raw.is_null() {
             unsafe { we_ffi::WasmEdge_ConfigureDelete(self.raw) }
@@ -93,17 +100,139 @@ impl Drop for WasmEdgeConfigureContext {
     }
 }
 
-pub struct WasmEdgeStoreContext {
+pub struct StoreContext<'vm> {
     raw: *mut we_ffi::WasmEdge_StoreContext,
+    _marker: PhantomData<&'vm VMContext>,
 }
-impl WasmEdgeStoreContext {
-    pub fn new() -> WasmEdgeStoreContext {
-        WasmEdgeStoreContext {
+impl<'vm> StoreContext<'vm> {
+    pub fn create() -> StoreContext<'vm> {
+        StoreContext {
             raw: unsafe { we_ffi::WasmEdge_StoreCreate() },
+            _marker: PhantomData,
         }
     }
+
+    pub fn find_memory(&self, mem_name: &str) -> MemoryInstanceContext {
+        let mem_name = WasmEdgeString::from_str(mem_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", mem_name).as_str());
+        let mem = unsafe { we_ffi::WasmEdge_StoreFindMemory(self.raw, mem_name.raw) };
+        MemoryInstanceContext {
+            raw: mem,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn find_memory_registered(&self, mod_name: &str, mem_name: &str) -> MemoryInstanceContext {
+        let mod_name = WasmEdgeString::from_str(mod_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
+        let mem_name = WasmEdgeString::from_str(mem_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", mem_name).as_str());
+        let mem = unsafe {
+            we_ffi::WasmEdge_StoreFindMemoryRegistered(self.raw, mod_name.raw, mem_name.raw)
+        };
+        MemoryInstanceContext {
+            raw: mem,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn list_function_len(&self) -> usize {
+        unsafe { we_ffi::WasmEdge_StoreListFunctionLength(self.raw) as usize }
+    }
+
+    pub fn list_function_registered_len(&self, mod_name: &str) -> usize {
+        let mod_name = WasmEdgeString::from_str(mod_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
+        unsafe {
+            we_ffi::WasmEdge_StoreListFunctionRegisteredLength(self.raw, mod_name.raw) as usize
+        }
+    }
+
+    pub fn list_table_len(&self) -> usize {
+        unsafe { we_ffi::WasmEdge_StoreListTableLength(self.raw) as usize }
+    }
+
+    pub fn list_table_registered_len(&self, mod_name: &str) -> usize {
+        let mod_name = WasmEdgeString::from_str(mod_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
+        unsafe { we_ffi::WasmEdge_StoreListTableRegisteredLength(self.raw, mod_name.raw) as usize }
+    }
+
+    pub fn list_global_len(&self) -> usize {
+        unsafe { we_ffi::WasmEdge_StoreListGlobalLength(self.raw) as usize }
+    }
+
+    pub fn list_global_registered_len(&self, mod_name: &str) -> usize {
+        let mod_name = WasmEdgeString::from_str(mod_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
+        unsafe { we_ffi::WasmEdge_StoreListGlobalRegisteredLength(self.raw, mod_name.raw) as usize }
+    }
+
+    pub fn list_memory_len(&self) -> usize {
+        let len = unsafe { we_ffi::WasmEdge_StoreListMemoryLength(self.raw) };
+        len as usize
+    }
+
+    pub fn list_memory(
+        &self,
+        buf: &mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
+    ) -> (usize, Vec<String>) {
+        let len = unsafe {
+            we_ffi::WasmEdge_StoreListMemory(
+                self.raw,
+                buf.as_mut_ptr() as *mut we_ffi::WasmEdge_String,
+                buf.len() as u32,
+            )
+        };
+        let s_vec = unsafe { mem::MaybeUninit::slice_assume_init_ref(&buf[..buf.len()]) };
+        let mut names = vec![];
+        for s in s_vec {
+            let str = WasmEdgeString { raw: *s };
+            let cow = str.to_string_lossy();
+            names.push(cow.into_owned())
+        }
+        (len as usize, names)
+    }
+
+    pub fn list_memory_registered_len(&self, mod_name: &str) -> usize {
+        let mod_name = WasmEdgeString::from_str(mod_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
+        let len =
+            unsafe { we_ffi::WasmEdge_StoreListMemoryRegisteredLength(self.raw, mod_name.raw) };
+        len as usize
+    }
+
+    pub fn list_memory_registered(
+        &self,
+        mod_name: &str,
+        buf: &mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
+    ) -> (usize, Vec<String>) {
+        let mod_name = WasmEdgeString::from_str(mod_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
+        let len = unsafe {
+            we_ffi::WasmEdge_StoreListMemoryRegistered(
+                self.raw,
+                mod_name.raw,
+                buf.as_mut_ptr() as *mut we_ffi::WasmEdge_String,
+                buf.len() as u32,
+            )
+        };
+        let s_vec = unsafe { mem::MaybeUninit::slice_assume_init_ref(&buf[..buf.len()]) };
+        let mut names = vec![];
+        for s in s_vec {
+            let str = WasmEdgeString { raw: *s };
+            let cow = str.to_string_lossy();
+            names.push(cow.into_owned())
+        }
+        (len as usize, names)
+    }
+
+    pub fn list_module_len(&self) -> usize {
+        let len = unsafe { we_ffi::WasmEdge_StoreListModuleLength(self.raw) };
+        len as usize
+    }
 }
-impl Drop for WasmEdgeStoreContext {
+impl<'vm> Drop for StoreContext<'vm> {
     fn drop(&mut self) {
         if !self.raw.is_null() {
             unsafe { we_ffi::WasmEdge_StoreDelete(self.raw) }
@@ -111,55 +240,49 @@ impl Drop for WasmEdgeStoreContext {
     }
 }
 
-pub type WasmEdgeHostRegistration = we_ffi::WasmEdge_HostRegistration;
+pub type HostRegistration = we_ffi::WasmEdge_HostRegistration;
 
-pub fn add_host_registration(ctx: &mut WasmEdgeConfigureContext, host: WasmEdgeHostRegistration) {
+pub fn add_host_registration(ctx: &mut ConfigureContext, host: HostRegistration) {
     unsafe { we_ffi::WasmEdge_ConfigureAddHostRegistration(ctx.raw, host) }
 }
 
-pub fn remove_host_registration(
-    ctx: &mut WasmEdgeConfigureContext,
-    host: WasmEdgeHostRegistration,
-) {
+pub fn remove_host_registration(ctx: &mut ConfigureContext, host: HostRegistration) {
     unsafe { we_ffi::WasmEdge_ConfigureRemoveHostRegistration(ctx.raw, host) }
 }
 
-pub fn has_host_registration(
-    ctx: &WasmEdgeConfigureContext,
-    host: WasmEdgeHostRegistration,
-) -> bool {
+pub fn has_host_registration(ctx: &ConfigureContext, host: HostRegistration) -> bool {
     {
         unsafe { we_ffi::WasmEdge_ConfigureHasHostRegistration(ctx.raw, host) }
     }
 }
 
-pub struct WasmEdgeVMContext {
+pub struct VMContext {
     raw: *mut we_ffi::WasmEdge_VMContext,
 }
-impl WasmEdgeVMContext {
+impl VMContext {
     pub fn create(
-        conf_ctx: Option<&WasmEdgeConfigureContext>,
-        store_ctx: Option<&mut WasmEdgeStoreContext>,
-    ) -> WasmEdgeVMContext {
+        conf_ctx: Option<&ConfigureContext>,
+        store_ctx: Option<&mut StoreContext>,
+    ) -> VMContext {
         match (conf_ctx, store_ctx) {
-            (Some(conf_ctx), Some(store_ctx)) => WasmEdgeVMContext {
+            (Some(conf_ctx), Some(store_ctx)) => VMContext {
                 raw: unsafe { we_ffi::WasmEdge_VMCreate(conf_ctx.raw, store_ctx.raw) },
             },
-            (Some(conf_ctx), None) => WasmEdgeVMContext {
+            (Some(conf_ctx), None) => VMContext {
                 raw: unsafe { we_ffi::WasmEdge_VMCreate(conf_ctx.raw, ptr::null_mut()) },
             },
-            (None, Some(store_ctx)) => WasmEdgeVMContext {
+            (None, Some(store_ctx)) => VMContext {
                 raw: unsafe { we_ffi::WasmEdge_VMCreate(ptr::null(), store_ctx.raw) },
             },
-            (None, None) => WasmEdgeVMContext {
+            (None, None) => VMContext {
                 raw: unsafe { we_ffi::WasmEdge_VMCreate(ptr::null(), ptr::null_mut()) },
             },
         }
     }
 
-    pub fn register_module_from_import(
+    pub fn register_module_from_import_object(
         &mut self,
-        import_ctx: &WasmEdgeImportObjectContext,
+        import_ctx: &ImportObjectContext,
     ) -> WasmEdgeResult<u32> {
         unsafe {
             check(we_ffi::WasmEdge_VMRegisterModuleFromImport(
@@ -246,7 +369,7 @@ impl WasmEdgeVMContext {
         }
     }
 
-    pub fn function_type(&self, func_name: &str) -> Option<WasmEdgeFunctionTypeContext> {
+    pub fn function_type(&self, func_name: &str) -> Option<FunctionTypeContext> {
         let func_name = WasmEdgeString::from_str(func_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", func_name).as_str());
         let result = unsafe { we_ffi::WasmEdge_VMGetFunctionType(self.raw, func_name.raw) };
@@ -254,14 +377,14 @@ impl WasmEdgeVMContext {
             return None;
         }
 
-        Some(WasmEdgeFunctionTypeContext { raw: result })
+        Some(FunctionTypeContext { raw: result })
     }
 
     pub fn function_type_registered(
         &self,
         mod_name: &str,
         func_name: &str,
-    ) -> Option<WasmEdgeFunctionTypeContext> {
+    ) -> Option<FunctionTypeContext> {
         let mod_name = WasmEdgeString::from_str(mod_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
         let func_name = WasmEdgeString::from_str(func_name)
@@ -273,14 +396,67 @@ impl WasmEdgeVMContext {
             return None;
         }
 
-        Some(WasmEdgeFunctionTypeContext { raw: result })
+        Some(FunctionTypeContext { raw: result })
     }
 
     pub fn function_list_len(&self) -> usize {
         unsafe { we_ffi::WasmEdge_VMGetFunctionListLength(self.raw) as usize }
     }
+
+    pub fn importobject_module(&self, reg: HostRegistration) -> Option<ImportObjectContext> {
+        let raw = unsafe { we_ffi::WasmEdge_VMGetImportModuleContext(self.raw, reg) };
+        if raw.is_null() {
+            return None;
+        } else {
+        }
+        match raw.is_null() {
+            true => None,
+            false => Some(ImportObjectContext {
+                raw,
+                _marker: PhantomData,
+            }),
+        }
+    }
+
+    pub fn execute_registered<'vm>(
+        &self,
+        mod_name: &str,
+        func_name: &str,
+        params: &[WasmEdgeValue],
+        buf: &'vm mut [mem::MaybeUninit<WasmEdgeValue>],
+    ) -> WasmEdgeResult<&'vm [WasmEdgeValue]> {
+        unsafe {
+            let mod_name = WasmEdgeString::from_str(mod_name)
+                .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
+            let func_name = WasmEdgeString::from_str(func_name)
+                .expect(format!("Failed to create WasmEdgeString from '{}'", func_name).as_str());
+
+            let result = check(we_ffi::WasmEdge_VMExecuteRegistered(
+                self.raw,
+                mod_name.raw,
+                func_name.raw,
+                params.as_ptr() as *const WasmEdgeValue,
+                params.len() as u32,
+                buf.as_mut_ptr() as *mut WasmEdgeValue,
+                buf.len() as u32,
+            ));
+
+            match result {
+                Ok(_) => Ok(mem::MaybeUninit::slice_assume_init_ref(&buf[..buf.len()])),
+                Err(err) => Err(err),
+            }
+        }
+    }
+
+    pub fn store_context(&self) -> StoreContext {
+        let store_ctx = unsafe { we_ffi::WasmEdge_VMGetStoreContext(self.raw) };
+        StoreContext {
+            raw: store_ctx,
+            _marker: PhantomData,
+        }
+    }
 }
-impl Drop for WasmEdgeVMContext {
+impl Drop for VMContext {
     fn drop(&mut self) {
         if !self.raw.is_null() {
             unsafe { we_ffi::WasmEdge_VMDelete(self.raw) }
@@ -314,6 +490,10 @@ pub fn WasmEdgeValueGenI64(val: i64) -> WasmEdgeValue {
     unsafe { we_ffi::WasmEdge_ValueGenI64(val) }
 }
 
+pub fn WasmEdgeValueGenExternRef(ptr: *mut ::std::os::raw::c_void) -> WasmEdgeValue {
+    unsafe { we_ffi::WasmEdge_ValueGenExternRef(ptr) }
+}
+
 pub fn WasmEdgeValueGetI32(val: WasmEdgeValue) -> i32 {
     unsafe { we_ffi::WasmEdge_ValueGetI32(val) }
 }
@@ -322,8 +502,12 @@ pub fn WasmEdgeValueGetI64(val: WasmEdgeValue) -> i64 {
     unsafe { we_ffi::WasmEdge_ValueGetI64(val) }
 }
 
+pub fn WasmEdgeValueGetExternRef(val: WasmEdgeValue) -> *mut ::std::os::raw::c_void {
+    unsafe { we_ffi::WasmEdge_ValueGetExternRef(val) }
+}
+
 pub fn vm_run_wasm_from_file<'vm, P: AsRef<Path>>(
-    ctx: &'vm mut WasmEdgeVMContext,
+    ctx: &'vm mut VMContext,
     path: P,
     func_name: &str,
     params: &[WasmEdgeValue],
@@ -355,19 +539,23 @@ pub fn vm_run_wasm_from_file<'vm, P: AsRef<Path>>(
 
 pub type WasmEdgeValType = we_ffi::WasmEdge_ValType;
 
-pub struct WasmEdgeFunctionTypeContext {
+pub struct FunctionTypeContext {
     raw: *mut we_ffi::WasmEdge_FunctionTypeContext,
 }
-impl WasmEdgeFunctionTypeContext {
-    pub fn new(
-        params: &[WasmEdgeValType],
+impl FunctionTypeContext {
+    pub fn create(
+        params: Option<&[WasmEdgeValType]>,
         returns: &[WasmEdgeValType],
-    ) -> WasmEdgeFunctionTypeContext {
-        WasmEdgeFunctionTypeContext {
+    ) -> FunctionTypeContext {
+        let (param_list, param_len) = match params {
+            Some(params) => (params.as_ptr(), params.len()),
+            None => (ptr::null(), 0),
+        };
+        FunctionTypeContext {
             raw: unsafe {
                 we_ffi::WasmEdge_FunctionTypeCreate(
-                    params.as_ptr(),
-                    params.len() as u32,
+                    param_list,
+                    param_len as u32,
                     returns.as_ptr(),
                     returns.len() as u32,
                 )
@@ -409,62 +597,115 @@ impl WasmEdgeFunctionTypeContext {
             mem::MaybeUninit::slice_assume_init_ref(&list[..list.len()])
         })
     }
-
-    pub fn into_raw(&self) -> *mut we_ffi::WasmEdge_FunctionTypeContext {
-        self.raw
-    }
 }
-impl Drop for WasmEdgeFunctionTypeContext {
+impl Drop for FunctionTypeContext {
     fn drop(&mut self) {
         unsafe { we_ffi::WasmEdge_FunctionTypeDelete(self.raw) }
     }
 }
 
-pub struct WasmEdgeHostFunctionContext {
+pub struct HostFunctionContext {
     raw: *mut we_ffi::WasmEdge_HostFunctionContext,
 }
-impl WasmEdgeHostFunctionContext {
-    pub fn new(
-        func_type: &WasmEdgeFunctionTypeContext,
+impl HostFunctionContext {
+    pub fn create(
+        func_type: &FunctionTypeContext,
         host_func: we_ffi::WasmEdge_HostFunc_t,
         cost: u64,
-    ) -> WasmEdgeHostFunctionContext {
-        WasmEdgeHostFunctionContext {
+    ) -> Option<HostFunctionContext> {
+        let raw = unsafe { we_ffi::WasmEdge_HostFunctionCreate(func_type.raw, host_func, cost) };
+        println!("raw: {:?}", raw);
+        match raw.is_null() {
+            true => None,
+            false => Some(HostFunctionContext { raw }),
+        }
+    }
+
+    pub fn create_binding(
+        func_type: &FunctionTypeContext,
+        wrap_func: we_ffi::WasmEdge_WrapFunc_t,
+        binding: *mut std::os::raw::c_void,
+        cost: u64,
+    ) -> HostFunctionContext {
+        HostFunctionContext {
             raw: unsafe {
-                we_ffi::WasmEdge_HostFunctionCreate(func_type.into_raw(), host_func, cost)
+                we_ffi::WasmEdge_HostFunctionCreateBinding(func_type.raw, wrap_func, binding, cost)
             },
         }
     }
 }
-impl Drop for WasmEdgeHostFunctionContext {
+impl Drop for HostFunctionContext {
     fn drop(&mut self) {
         unsafe { we_ffi::WasmEdge_HostFunctionDelete(self.raw) }
     }
 }
 
-pub struct WasmEdgeImportObjectContext {
+#[derive(Clone)]
+pub struct ImportObjectContext<'vm> {
     raw: *mut we_ffi::WasmEdge_ImportObjectContext,
+    _marker: PhantomData<&'vm VMContext>,
 }
-impl WasmEdgeImportObjectContext {
-    pub fn create(mod_name: &str, data: *mut std::os::raw::c_void) -> WasmEdgeImportObjectContext {
+impl<'vm> ImportObjectContext<'vm> {
+    pub fn create(mod_name: &str, data: *mut std::os::raw::c_void) -> Option<ImportObjectContext> {
         let mod_name = WasmEdgeString::from_str(mod_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
-        WasmEdgeImportObjectContext {
-            raw: unsafe { we_ffi::WasmEdge_ImportObjectCreate(mod_name.raw, data) },
+        let raw = unsafe { we_ffi::WasmEdge_ImportObjectCreate(mod_name.raw, data) };
+        match raw.is_null() {
+            true => None,
+            false => Some(ImportObjectContext {
+                raw,
+                _marker: PhantomData,
+            }),
         }
     }
 
-    pub fn create_tensorflow_import_object() -> WasmEdgeImportObjectContext {
-        WasmEdgeImportObjectContext {
+    pub fn create_tensorflow_import_object() -> ImportObjectContext<'vm> {
+        ImportObjectContext {
             raw: unsafe { we_ffi::WasmEdge_Tensorflow_ImportObjectCreate() },
+            _marker: PhantomData,
         }
     }
 
-    pub fn add_host_function(
-        &mut self,
-        name: &str,
-        host_func_ctx: &mut WasmEdgeHostFunctionContext,
-    ) {
+    pub fn create_tensorflowlite_import_object() -> ImportObjectContext<'vm> {
+        ImportObjectContext {
+            raw: unsafe { we_ffi::WasmEdge_TensorflowLite_ImportObjectCreate() },
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn init_wasi(&self, args: &[&str], envs: &[&str], dirs: &[&str], preopens: &[&str]) {
+        let mut cargs = vec![];
+        for &arg in args.iter() {
+            cargs.push(arg.as_ptr() as *const _);
+        }
+        let mut cenvs = vec![];
+        for &env in envs.iter() {
+            cenvs.push(env.as_ptr() as *const _);
+        }
+        let mut cdirs = vec![];
+        for &dir in dirs.iter() {
+            cdirs.push(dir.as_ptr() as *const _);
+        }
+        let mut cpreopens = vec![];
+        for &pre in preopens.iter() {
+            cpreopens.push(pre.as_ptr() as *const _);
+        }
+        unsafe {
+            we_ffi::WasmEdge_ImportObjectInitWASI(
+                self.raw,
+                cargs.as_ptr(),
+                cargs.len() as u32,
+                cenvs.as_ptr(),
+                cenvs.len() as u32,
+                cdirs.as_ptr(),
+                cdirs.len() as u32,
+                cpreopens.as_ptr(),
+                cpreopens.len() as u32,
+            )
+        };
+    }
+
+    pub fn add_host_function(&mut self, name: &str, host_func_ctx: &mut HostFunctionContext) {
         let name = WasmEdgeString::from_str(name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", name).as_str());
         unsafe {
@@ -472,13 +713,13 @@ impl WasmEdgeImportObjectContext {
         }
     }
 
-    pub fn add_table(&mut self, name: &str, table_ctx: &mut WasmEdgeTableInstanceContext) {
+    pub fn add_table(&mut self, name: &str, table_ctx: &mut TableInstanceContext) {
         let name = WasmEdgeString::from_str(name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", name).as_str());
         unsafe { we_ffi::WasmEdge_ImportObjectAddTable(self.raw, name.raw, table_ctx.raw) }
     }
 
-    pub fn add_memory(&mut self, name: &str, mem_ctx: &mut WasmEdgeMemoryInstanceContext) {
+    pub fn add_memory(&mut self, name: &str, mem_ctx: &mut MemoryInstanceContext) {
         let name = WasmEdgeString::from_str(name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", name).as_str());
         unsafe {
@@ -486,11 +727,18 @@ impl WasmEdgeImportObjectContext {
         }
     }
 
-    pub fn add_global(&mut self, name: &str, global_ctx: &mut WasmEdgeGlobalInstanceContext) {
+    pub fn add_global(&mut self, name: &str, global_ctx: &mut GlobalInstanceContext) {
         let name = WasmEdgeString::from_str(name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", name).as_str());
         unsafe {
             we_ffi::WasmEdge_ImportObjectAddGlobal(self.raw, name.raw, global_ctx.raw);
+        }
+    }
+}
+impl<'vm> Drop for ImportObjectContext<'vm> {
+    fn drop(&mut self) {
+        if !self.raw.is_null() {
+            unsafe { we_ffi::WasmEdge_ImportObjectDelete(self.raw) }
         }
     }
 }
@@ -511,6 +759,15 @@ impl WasmEdgeString {
             raw: unsafe { we_ffi::WasmEdge_StringCreateByBuffer(buf.as_ptr(), buf.len() as u32) },
         }
     }
+
+    pub fn to_string_lossy(&self) -> std::borrow::Cow<'_, str> {
+        let cstr = unsafe { CStr::from_ptr(self.raw.Buf) };
+        cstr.to_string_lossy()
+    }
+
+    pub fn into_raw(&self) -> we_ffi::WasmEdge_String {
+        self.raw
+    }
 }
 impl Drop for WasmEdgeString {
     fn drop(&mut self) {
@@ -522,58 +779,234 @@ pub type WasmEdgeLimit = we_ffi::WasmEdge_Limit;
 pub type WasmEdgeRefType = we_ffi::WasmEdge_RefType;
 pub type WasmEdgeMutability = we_ffi::WasmEdge_Mutability;
 
-pub struct WasmEdgeTableInstanceContext {
+pub struct TableInstanceContext {
     raw: *mut we_ffi::WasmEdge_TableInstanceContext,
 }
-impl WasmEdgeTableInstanceContext {
-    pub fn create(ref_type: WasmEdgeRefType, limit: WasmEdgeLimit) -> WasmEdgeTableInstanceContext {
-        WasmEdgeTableInstanceContext {
+impl TableInstanceContext {
+    pub fn create(ref_type: WasmEdgeRefType, limit: WasmEdgeLimit) -> TableInstanceContext {
+        TableInstanceContext {
             raw: unsafe { we_ffi::WasmEdge_TableInstanceCreate(ref_type, limit) },
         }
     }
 }
-impl Drop for WasmEdgeTableInstanceContext {
+impl Drop for TableInstanceContext {
     fn drop(&mut self) {
         unsafe { we_ffi::WasmEdge_TableInstanceDelete(self.raw) }
     }
 }
 
-pub struct WasmEdgeMemoryInstanceContext {
+pub struct MemoryInstanceContext<'store, 'vm> {
     raw: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+    _marker: PhantomData<&'store StoreContext<'vm>>,
 }
-impl WasmEdgeMemoryInstanceContext {
+impl<'store, 'vm> MemoryInstanceContext<'store, 'vm> {
     pub fn create(limit: WasmEdgeLimit) -> Self {
-        WasmEdgeMemoryInstanceContext {
+        MemoryInstanceContext {
             raw: unsafe { we_ffi::WasmEdge_MemoryInstanceCreate(limit) },
+            _marker: PhantomData,
         }
     }
 }
-impl Drop for WasmEdgeMemoryInstanceContext {
+impl<'store, 'vm> Drop for MemoryInstanceContext<'store, 'vm> {
     fn drop(&mut self) {
         unsafe { we_ffi::WasmEdge_MemoryInstanceDelete(self.raw) }
     }
 }
 
-pub struct WasmEdgeGlobalInstanceContext {
+pub struct GlobalInstanceContext {
     raw: *mut we_ffi::WasmEdge_GlobalInstanceContext,
 }
-impl WasmEdgeGlobalInstanceContext {
+impl GlobalInstanceContext {
     pub fn create(value: WasmEdgeValue, mutable: WasmEdgeMutability) -> Self {
-        WasmEdgeGlobalInstanceContext {
+        GlobalInstanceContext {
             raw: unsafe { we_ffi::WasmEdge_GlobalInstanceCreate(value, mutable) },
         }
     }
 }
-impl Drop for WasmEdgeGlobalInstanceContext {
+impl Drop for GlobalInstanceContext {
     fn drop(&mut self) {
         unsafe { we_ffi::WasmEdge_GlobalInstanceDelete(self.raw) }
     }
 }
 
+pub struct ASTModuleContext {
+    raw: *mut we_ffi::WasmEdge_ASTModuleContext,
+}
+impl ASTModuleContext {
+    pub fn into_raw(&mut self) -> *mut we_ffi::WasmEdge_ASTModuleContext {
+        self.raw
+    }
+}
+impl Drop for ASTModuleContext {
+    fn drop(&mut self) {
+        if !self.raw.is_null() {
+            unsafe { we_ffi::WasmEdge_ASTModuleDelete(self.raw) }
+        }
+    }
+}
+impl Default for ASTModuleContext {
+    fn default() -> Self {
+        ASTModuleContext {
+            raw: ptr::null_mut(),
+        }
+    }
+}
+
+pub struct LoaderContext {
+    raw: *mut we_ffi::WasmEdge_LoaderContext,
+}
+impl LoaderContext {
+    pub fn create(conf: &ConfigureContext) -> Option<Self> {
+        let raw = unsafe { we_ffi::WasmEdge_LoaderCreate(conf.raw) };
+        match raw.is_null() {
+            true => None,
+            false => Some(LoaderContext { raw }),
+        }
+    }
+
+    pub fn parse_from_file<P: AsRef<Path>>(&mut self, module: &mut ASTModuleContext, path: P) {
+        let path = path_to_cstring(path.as_ref()).unwrap();
+        unsafe { we_ffi::WasmEdge_LoaderParseFromFile(self.raw, &mut module.raw, path.as_ptr()) };
+    }
+}
+impl Drop for LoaderContext {
+    fn drop(&mut self) {
+        if !self.raw.is_null() {
+            unsafe { we_ffi::WasmEdge_LoaderDelete(self.raw) }
+        }
+    }
+}
+
+pub struct InterpreterContext {
+    raw: *mut we_ffi::WasmEdge_InterpreterContext,
+}
+impl InterpreterContext {
+    pub fn create(
+        conf: Option<&ConfigureContext>,
+        stat: Option<&mut StatisticsContext>,
+    ) -> Option<Self> {
+        let conf = match conf {
+            Some(conf) => conf.raw,
+            None => ptr::null(),
+        };
+        let stat = match stat {
+            Some(stat) => stat.raw,
+            None => ptr::null_mut(),
+        };
+        let raw = unsafe { we_ffi::WasmEdge_InterpreterCreate(conf, stat) };
+        match raw.is_null() {
+            true => None,
+            false => Some(InterpreterContext { raw }),
+        }
+    }
+
+    pub fn register_import_object_module(
+        &mut self,
+        store: &mut StoreContext,
+        imp_obj: *const we_ffi::WasmEdge_ImportObjectContext,
+    ) -> bool {
+        let res = unsafe {
+            check(we_ffi::WasmEdge_InterpreterRegisterImport(
+                self.raw, store.raw, imp_obj,
+            ))
+        };
+        match res {
+            Err(_) => false,
+            Ok(_) => true,
+        }
+    }
+
+    pub fn register_ast_module(
+        &mut self,
+        store: &mut StoreContext,
+        ast_mod: &ASTModuleContext,
+        mod_name: &str,
+    ) -> bool {
+        let mod_name = WasmEdgeString::from_str(mod_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
+        let res = unsafe {
+            check(we_ffi::WasmEdge_InterpreterRegisterModule(
+                self.raw,
+                store.raw,
+                ast_mod.raw,
+                mod_name.raw,
+            ))
+        };
+        match res {
+            Err(_) => false,
+            Ok(_) => true,
+        }
+    }
+
+    pub fn instantiate(&mut self, store: &mut StoreContext, ast_mod: &ASTModuleContext) -> bool {
+        let res = unsafe {
+            check(we_ffi::WasmEdge_InterpreterInstantiate(
+                self.raw,
+                store.raw,
+                ast_mod.raw,
+            ))
+        };
+        match res {
+            Err(_) => false,
+            Ok(_) => true,
+        }
+    }
+}
+impl Drop for InterpreterContext {
+    fn drop(&mut self) {
+        unsafe { we_ffi::WasmEdge_InterpreterDelete(self.raw) }
+    }
+}
+
+pub struct StatisticsContext {
+    raw: *mut we_ffi::WasmEdge_StatisticsContext,
+}
+impl StatisticsContext {
+    pub fn create() -> Option<Self> {
+        let raw = unsafe { we_ffi::WasmEdge_StatisticsCreate() };
+        match raw.is_null() {
+            true => None,
+            false => Some(StatisticsContext { raw }),
+        }
+    }
+}
+impl Drop for StatisticsContext {
+    fn drop(&mut self) {
+        if !self.raw.is_null() {
+            unsafe { we_ffi::WasmEdge_StatisticsDelete(self.raw) }
+        }
+    }
+}
+
+pub struct Validator {
+    raw: *mut we_ffi::WasmEdge_ValidatorContext,
+}
+impl Validator {
+    pub fn create(conf: &ConfigureContext) -> Option<Self> {
+        let raw = unsafe { we_ffi::WasmEdge_ValidatorCreate(conf.raw) };
+        match raw.is_null() {
+            true => None,
+            false => Some(Validator { raw }),
+        }
+    }
+
+    pub fn validate(&mut self, ast_mod: &ASTModuleContext) -> WasmEdgeResult<u32> {
+        unsafe { check(we_ffi::WasmEdge_ValidatorValidate(self.raw, ast_mod.raw)) }
+    }
+}
+impl Drop for Validator {
+    fn drop(&mut self) {
+        if !self.raw.is_null() {
+            unsafe { we_ffi::WasmEdge_ValidatorDelete(self.raw) }
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
     // use std::path::Path;
+
+    const TPATH: &str = "/root/workspace/wasmedge-ml/wasmedge/tests/data/test.wasm";
 
     #[test]
     fn test_version() {
@@ -585,13 +1018,13 @@ mod tests {
 
     #[test]
     fn test_wasmedge_vm_run_wasm_from_file() {
-        let mut conf_ctx = WasmEdgeConfigureContext::create();
+        let mut conf_ctx = ConfigureContext::create();
         add_host_registration(
             &mut conf_ctx,
-            WasmEdgeHostRegistration::WasmEdge_HostRegistration_Wasi,
+            HostRegistration::WasmEdge_HostRegistration_Wasi,
         );
 
-        let mut vm_ctx = WasmEdgeVMContext::create(Some(&conf_ctx), None);
+        let mut vm_ctx = VMContext::create(Some(&conf_ctx), None);
         let wasm_name = "../../add.wasm";
         let func_name = "add";
         let params = vec![WasmEdgeValueGenI32(2), WasmEdgeValueGenI32(8)];
@@ -649,8 +1082,11 @@ mod tests {
             0x08, 0x00, 0x20, 0x00, 0x20, 0x01, 0x10, 0x00, 0x0B,
         ];
 
+        // Create the VM context.
+        let mut vm_ctx = VMContext::create(None, None);
+
         // create import object
-        let mut imp_obj = WasmEdgeImportObjectContext::create("extern", ptr::null_mut());
+        let mut imp_obj = ImportObjectContext::create("extern", ptr::null_mut()).unwrap();
 
         // Create and add a host function instance into the import object.
         let param_list = [
@@ -658,13 +1094,13 @@ mod tests {
             WasmEdgeValType::WasmEdge_ValType_I32,
         ];
         let return_list = [WasmEdgeValType::WasmEdge_ValType_I32];
-        let func_type = WasmEdgeFunctionTypeContext::new(&param_list, &return_list);
-        let mut host_func_ctx = WasmEdgeHostFunctionContext::new(&func_type, Some(Add), 0);
-        imp_obj.add_host_function("func-add", &mut host_func_ctx);
+        let func_type = FunctionTypeContext::create(Some(&param_list), &return_list);
+        let res = HostFunctionContext::create(&func_type, Some(Add), 0);
+        let mut host_func = res.unwrap();
+        imp_obj.add_host_function("func-add", &mut host_func);
 
-        // Create the VM context.
-        let mut vm_ctx = WasmEdgeVMContext::create(None, None);
-        vm_ctx.register_module_from_import(&imp_obj).unwrap();
+        // register import-object
+        vm_ctx.register_module_from_import_object(&imp_obj).unwrap();
 
         // The parameters and returns arrays.
         let params = vec![WasmEdgeValueGenI32(1234), WasmEdgeValueGenI32(5678)];
@@ -695,93 +1131,533 @@ mod tests {
     }
 
     #[test]
-    fn test_wasmedge_tensorflow() {
-        let mut conf_ctx = WasmEdgeConfigureContext::create();
-        conf_ctx.add_host_registration(WasmEdgeHostRegistration::WasmEdge_HostRegistration_Wasi);
-        conf_ctx.add_host_registration(
-            WasmEdgeHostRegistration::WasmEdge_HostRegistration_WasmEdge_Process,
-        );
-        let mut vm_ctx = WasmEdgeVMContext::create(Some(&conf_ctx), None);
+    fn test_wasmedge_memory_ctx() {
+        #[no_mangle]
+        unsafe extern "C" fn FuncAdd(
+            data: *mut std::os::raw::c_void,
+            mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+            params: *const WasmEdgeValue,
+            returns: *mut WasmEdgeValue,
+        ) -> we_ffi::WasmEdge_Result {
+            let params = std::slice::from_raw_parts(params, 2);
+            let val1 = WasmEdgeValueGetI32(params[0]);
+            let val2 = WasmEdgeValueGetI32(params[1]);
+            let res = WasmEdgeValueGenI32(val1 + val2);
+            returns.write(res);
 
-        // create tensorflow module: mod name: "wasmedge_tensorflow"
-        let tensorflow_mod = WasmEdgeImportObjectContext::create_tensorflow_import_object();
-        let result = vm_ctx.register_module_from_import(&tensorflow_mod);
+            we_ffi::WasmEdge_Result { Code: 0 }
+        }
+
+        // Create the VM context.
+        let mut vm_ctx = VMContext::create(None, None);
+
+        // create import object
+        let mod_name = "calculator";
+        let mut imp_obj = ImportObjectContext::create(mod_name, ptr::null_mut()).unwrap();
+
+        // Create and add a host function instance into the import object.
+        let param_list = [
+            WasmEdgeValType::WasmEdge_ValType_I32,
+            WasmEdgeValType::WasmEdge_ValType_I32,
+        ];
+        let return_list = [WasmEdgeValType::WasmEdge_ValType_I32];
+        let func_type = FunctionTypeContext::create(Some(&param_list), &return_list);
+        let res = HostFunctionContext::create(&func_type, Some(FuncAdd), 0);
+        let mut host_func = res.unwrap();
+        imp_obj.add_host_function("func-add", &mut host_func);
+
+        // register import-object
+        vm_ctx.register_module_from_import_object(&imp_obj).unwrap();
+
+        unsafe {
+            // let tf_imp_obj = we_ffi::WasmEdge_Tensorflow_ImportObjectCreate();
+            // vm_ctx
+            //     .register_module_from_import_object(&tf_imp_obj)
+            //     .unwrap();
+            // we_ffi::WasmEdge_VMRegisterModuleFromImport(vm_ctx.raw, tf_imp_obj);
+
+            // let ipt_ctx = we_ffi::WasmEdge_InterpreterCreate(ptr::null(), ptr::null_mut());
+            // let store_ctx = we_ffi::WasmEdge_StoreCreate();
+            // let result =
+            //     we_ffi::WasmEdge_InterpreterRegisterImport(ipt_ctx, store_ctx, imp_obj.raw);
+            // if !we_ffi::WasmEdge_ResultOK(result) {
+            //     println!("Import object registration failed");
+            // }
+
+            let x = we_ffi::WasmEdge_VMGetFunctionListLength(vm_ctx.raw);
+            println!("x: {}", x);
+
+            let store = we_ffi::WasmEdge_VMGetStoreContext(vm_ctx.raw);
+            // let mod_name = WasmEdgeString::from_str(mod_name).unwrap();
+            // let len = we_ffi::WasmEdge_StoreListMemoryRegisteredLength(store_ctx, mod_name.raw);
+
+            // let mod_name = WasmEdgeString::from_str("wasi_ephemeral_nn").unwrap();
+            let len = we_ffi::WasmEdge_StoreListFunctionLength(store);
+            println!("len: {}", len);
+        }
+    }
+
+    #[test]
+    fn test_wasmedge_tensorflow() {
+        let mut conf_ctx = ConfigureContext::create();
+        conf_ctx.add_host_registration(HostRegistration::WasmEdge_HostRegistration_Wasi);
+        conf_ctx
+            .add_host_registration(HostRegistration::WasmEdge_HostRegistration_WasmEdge_Process);
+        let mut vm_ctx = VMContext::create(Some(&conf_ctx), None);
+
+        // create tensorflow and tensorflowlite modules: mod name: "wasmedge_tensorflow", "wasmedge_tensorflowlite"
+        let mut result: Result<u32, WasmEdgeError>;
+        let tensorflow_mod = ImportObjectContext::create_tensorflow_import_object();
+        result = vm_ctx.register_module_from_import_object(&tensorflow_mod);
+        assert!(result.is_ok());
+        let tensorflowlite_mod = ImportObjectContext::create_tensorflowlite_import_object();
+        result = vm_ctx.register_module_from_import_object(&tensorflowlite_mod);
+        assert!(result.is_ok());
+
+        // check the registered function: wasmedge_tensorflow_create_session
+        let result = vm_ctx
+            .function_type_registered("wasmedge_tensorflow", "wasmedge_tensorflow_create_session");
+        assert!(result.is_some());
+        let func_type = result.unwrap();
+        let param_len = func_type.parameters_len();
+        println!(
+            "param len of wasmedge_tensorflow_create_session func: {}",
+            param_len
+        );
+        let result = vm_ctx.function_type_registered(
+            "wasmedge_tensorflowlite",
+            "wasmedge_tensorflowlite_create_session",
+        );
+        assert!(result.is_some());
+        let func_type = result.unwrap();
+        let param_len = func_type.parameters_len();
+        println!(
+            "param len of lite wasmedge_tensorflowlite_create_session: {}",
+            param_len
+        );
+
+        // check the registered function: wasmedge_tensorflow_get_output_tensor
+        let result = vm_ctx.function_type_registered(
+            "wasmedge_tensorflow",
+            "wasmedge_tensorflow_get_output_tensor",
+        );
+        assert!(result.is_some());
+        let func_type = result.unwrap();
+        let param_len = func_type.parameters_len();
+        println!(
+            "param len of wasmedge_tensorflow_get_output_tensor func: {}",
+            param_len
+        );
+
+        {
+            let wasi_module =
+                vm_ctx.importobject_module(HostRegistration::WasmEdge_HostRegistration_Wasi);
+            assert!(wasi_module.is_some());
+        }
+
+        // get import-objects
+        // let wasi_mod =
+        //     vm_ctx.import_module_mut(WasmEdgeHostRegistration::WasmEdge_HostRegistration_Wasi);
+        // let proc_mod = vm_ctx.import_module_mut(
+        //     WasmEdgeHostRegistration::WasmEdge_HostRegistration_WasmEdge_Process,
+        // );
+
+        // // init wasi_mod
+        // let args = vec!["using_add.wasm"];
+        // let envs = vec![];
+        // let dirs = vec![".:."];
+        // let preopens = vec![];
+        // wasi_mod.init_wasi(
+        //     args.as_slice(),
+        //     envs.as_slice(),
+        //     dirs.as_slice(),
+        //     preopens.as_slice(),
+        // );
+
+        // register wasmedge-wasi-nn module
+        let result = vm_ctx.register_module_from_file(
+            "calculator",
+            "/root/workspace/wasmedge-ml/wasmedge-wasi-nn/target/wasm32-wasi/debug/wasmedge_wasi_nn.wasm",
+        );
+        assert!(result.is_ok());
+
+        // // load tensorflow model
+        // let buf = std::fs::read("/root/workspace/wasmedge-ml/docs/add.pb").unwrap();
+        // let vec = [&buf];
+        // let ptr = vec.as_ptr();
+        // let ptr = ptr as i64;
+
+        // // ! debug
+        // println!("ptr: {:#X}", ptr);
+
+        // // run target wasm module
+        // let params = vec![WasmEdgeValueGenI64(ptr), WasmEdgeValueGenI32(1)];
+        // let mut out: [mem::MaybeUninit<WasmEdgeValue>; 1] = mem::MaybeUninit::uninit_array();
+        // let result = vm_ctx.run_wasm_from_file(
+        //     "/root/workspace/examples/using_add/target/wasm32-wasi/debug/using_add.wasm",
+        //     "consume_load",
+        //     params.as_slice(),
+        //     &mut out,
+        // );
+        // assert!(result.is_ok());
+
+        // let values = result.unwrap();
+        // assert_eq!(values.len(), 1);
+        // assert_eq!(WasmEdgeValueGetI32(values[0]), 1);
+    }
+
+    #[test]
+    fn test_wasmedge_run_wasm() {
+        let mut conf_ctx = ConfigureContext::create();
+        conf_ctx.add_host_registration(HostRegistration::WasmEdge_HostRegistration_Wasi);
+        conf_ctx
+            .add_host_registration(HostRegistration::WasmEdge_HostRegistration_WasmEdge_Process);
+        let mut vm_ctx = VMContext::create(Some(&conf_ctx), None);
+
+        // create tensorflow and tensorflowlite modules: mod name: "wasmedge_tensorflow", "wasmedge_tensorflowlite"
+        let mut result: Result<u32, WasmEdgeError>;
+        let tensorflow_mod = ImportObjectContext::create_tensorflow_import_object();
+        result = vm_ctx.register_module_from_import_object(&tensorflow_mod);
+        assert!(result.is_ok());
+        let tensorflowlite_mod = ImportObjectContext::create_tensorflowlite_import_object();
+        result = vm_ctx.register_module_from_import_object(&tensorflowlite_mod);
         assert!(result.is_ok());
         // check the registered function
         let result = vm_ctx
             .function_type_registered("wasmedge_tensorflow", "wasmedge_tensorflow_create_session");
         assert!(result.is_some());
+        let result = vm_ctx.function_type_registered(
+            "wasmedge_tensorflowlite",
+            "wasmedge_tensorflowlite_create_session",
+        );
+        assert!(result.is_some());
 
-        // register wasmedge-wasi-nn module
-        let result = vm_ctx.register_module_from_file(
+        // register wasmedge_wasi_nn.wasm module
+        let res = vm_ctx.register_module_from_file(
             "calculator",
-            "/root/workspace/wasmedge-ml/target/wasm32-wasi/debug/wasmedge_wasi_nn.wasm",
+            "/root/workspace/wasmedge-ml/wasmedge-wasi-nn/target/wasm32-wasi/debug/wasmedge_wasi_nn.wasm",
+        );
+        assert!(res.is_ok());
+
+        // register using_add.wasm module
+        let mod_name = "using_add";
+        let result = vm_ctx.register_module_from_file(
+            mod_name,
+            "/root/workspace/examples/using_add/target/wasm32-wasi/debug/using_add.wasm",
         );
         assert!(result.is_ok());
 
-        // load tensorflow model
-        let buf = std::fs::read("/root/workspace/wasmedge-ml/docs/add.pb").unwrap();
-        let vec = [&buf];
-        let ptr = vec.as_ptr();
-        let ptr = ptr as i64;
-
-        // run target wasm module
-        let params = vec![WasmEdgeValueGenI64(ptr), WasmEdgeValueGenI32(1)];
+        // call consume_add function in registered using_add.wasm module
+        let func_name = "consume_add";
+        let params = vec![WasmEdgeValueGenI32(2), WasmEdgeValueGenI32(8)];
         let mut out: [mem::MaybeUninit<WasmEdgeValue>; 1] = mem::MaybeUninit::uninit_array();
-        let result = vm_ctx.run_wasm_from_file(
-            "/root/workspace/wasmedge-ml/docs/using_add.wasm",
-            "consume_load",
-            params.as_slice(),
-            &mut out,
-        );
+        let result = vm_ctx.execute_registered(mod_name, func_name, params.as_slice(), &mut out);
         assert!(result.is_ok());
 
         let values = result.unwrap();
         assert_eq!(values.len(), 1);
-        assert_eq!(WasmEdgeValueGetI32(values[0]), 101);
+        assert_eq!(WasmEdgeValueGetI32(values[0]), 10);
+
+        {
+            // run consume_add function in using_add.wasm
+            let buf = std::fs::read("/root/workspace/wasmedge-ml/docs/add.pb").unwrap();
+            let buf2 = std::fs::read("/root/workspace/mtcnn/mtcnn.pb").unwrap();
+            let vec = [&buf];
+            let ptr = vec.as_ptr();
+            println!("ptr: {:?}", ptr);
+
+            // let xml = std::fs::read_to_string("fixture/model.xml")
+            //     .unwrap()
+            //     .into_bytes();
+            // let weights = std::fs::read("fixture/model.bin").unwrap();
+            // let x = &[&xml, &weights];
+
+            let func_name = "consume_load";
+            let params = vec![WasmEdgeValueGenI64(ptr as i64), WasmEdgeValueGenI32(1)];
+            let mut out: [mem::MaybeUninit<WasmEdgeValue>; 1] = mem::MaybeUninit::uninit_array();
+            let result =
+                vm_ctx.execute_registered(mod_name, func_name, params.as_slice(), &mut out);
+            assert!(result.is_ok());
+
+            // let values = result.unwrap();
+            // assert_eq!(values.len(), 1);
+            // assert_eq!(WasmEdgeValueGetI32(values[0]), 10);
+        }
     }
 
-    // #[test]
-    // fn test_wasmedge_run_wasm() {
-    //     // create VM    turning on the Wasi support
-    //     let mut config_ctx = WasmEdgeConfigureContext::create();
-    //     config_ctx.add_host_registration(
-    //         we_ffi::WasmEdge_HostRegistration::WasmEdge_HostRegistration_Wasi,
-    //     );
-    //     let mut vm_ctx = WasmEdgeVMContext::create(Some(&config_ctx), None);
+    #[test]
+    fn test_wasmedge_store() {
+        // create contexts
+        let mut conf = ConfigureContext::create();
+        conf.add_host_registration(HostRegistration::WasmEdge_HostRegistration_Wasi);
+        conf.add_host_registration(HostRegistration::WasmEdge_HostRegistration_WasmEdge_Process);
+        conf.add_proposal(WasmEdgeProposal::WasmEdge_Proposal_ReferenceTypes);
+        let mut store = StoreContext::create();
+        let mod_name = vec!["module", "extern", "no-such-module"];
+        let err_name = "invalid-instance-name";
 
-    //     // let mut vm_ctx = WasmEdgeVMContext::create(None, None);
+        // Store list exports before instantiation
+        assert_eq!(store.list_function_len(), 0);
+        assert_eq!(store.list_table_len(), 0);
+        assert_eq!(store.list_memory_len(), 0);
+        assert_eq!(store.list_global_len(), 0);
+        assert_eq!(store.list_function_registered_len(mod_name[1]), 0);
+        assert_eq!(store.list_table_registered_len(mod_name[1]), 0);
+        assert_eq!(store.list_memory_registered_len(mod_name[1]), 0);
+        assert_eq!(store.list_global_registered_len(mod_name[1]), 0);
+        assert_eq!(store.list_module_len(), 0);
 
-    //     // * register wasm_calc.wasm
-    //     // register the wasm module into vm
-    //     let res = vm_ctx.register_module_from_file(
-    //         "calculator",
-    //         "/root/workspace/wasmedge-ml/target/wasm32-wasi/debug/wasmedge_wasi_nn.wasm",
-    //     );
-    //     assert!(res.is_ok());
+        // Register host module and instantiate wasm module
+        let res = create_extern_module("extern", false);
+        assert!(res.is_some());
+        let imp_obj = res.unwrap();
+        assert!(!imp_obj.is_null());
+        let res = load_module(&conf);
+        assert!(res.is_some());
+        let mut ast_mod = res.unwrap();
+        assert!(!ast_mod.into_raw().is_null());
+        assert!(validate_module(&conf, &ast_mod));
+        assert!(instantiate_module(&conf, &mut store, &ast_mod, imp_obj));
 
-    //     // * run consume_add function in using_add.wasm
-    //     let buf = std::fs::read("/root/workspace/wasmedge-ml/docs/add.pb").unwrap();
-    //     let vec = [&buf];
-    //     let ptr = vec.as_ptr();
-    //     let ptr = ptr as i64;
+        // unsafe { we_ffi::WasmEdge_ImportObjectDelete(imp_obj) };
+    }
 
-    //     let params = vec![WasmEdgeValueGenI64(ptr), WasmEdgeValueGenI32(1)];
-    //     let mut out: [mem::MaybeUninit<WasmEdgeValue>; 1] = mem::MaybeUninit::uninit_array();
+    fn create_extern_module(
+        name: &str,
+        is_wrap: bool,
+    ) -> Option<*mut we_ffi::WasmEdge_ImportObjectContext> {
+        unsafe {
+            // let host_name = WasmEdgeString::from_str(name).unwrap().into_raw();
+            let x = CString::new(name).unwrap();
+            let host_name = we_ffi::WasmEdge_StringCreateByCString(x.as_ptr());
+            let imp_obj = we_ffi::WasmEdge_ImportObjectCreate(host_name, ptr::null_mut());
 
-    //     // Run the WASM function from file.
-    //     let result = vm_ctx.run_wasm_from_file(
-    //         Path::new("/root/workspace/wasmedge-ml/docs/using_add.wasm")
-    //             .canonicalize()
-    //             .unwrap(),
-    //         "consume_load",
-    //         params.as_slice(),
-    //         &mut out,
-    //     );
-    //     assert!(result.is_ok());
+            let param = [
+                WasmEdgeValType::WasmEdge_ValType_ExternRef,
+                WasmEdgeValType::WasmEdge_ValType_I32,
+            ];
+            let result = [WasmEdgeValType::WasmEdge_ValType_I32];
+            let host_ftype = FunctionTypeContext::create(Some(&param), &result);
 
-    //     let values = result.unwrap();
-    //     assert_eq!(values.len(), 1);
-    //     assert_eq!(WasmEdgeValueGetI32(values[0]), 1);
-    // }
+            // Add host function "func-add"
+            let host_func =
+                we_ffi::WasmEdge_HostFunctionCreate(host_ftype.raw, Some(extern_add), 0);
+            println!("host_func: {:?}", host_func);
+            // let res = HostFunctionContext::create(host_ftype, Some(extern_add), 0);
+            // assert!(res.is_some());
+            // let host_func = res.unwrap();
+            // println!("host_func.raw: {:?}", host_func.raw);
+            let host_name = WasmEdgeString::from_str("func-add").unwrap();
+            we_ffi::WasmEdge_ImportObjectAddHostFunction(imp_obj, host_name.raw, host_func);
+
+            // let host_func =
+            //     we_ffi::WasmEdge_HostFunctionCreate(host_ftype.raw, Some(extern_add), 0);
+            // let x = CString::new("func-add").unwrap();
+            // let host_name = we_ffi::WasmEdge_StringCreateByCString(x.as_ptr());
+            // we_ffi::WasmEdge_ImportObjectAddHostFunction(imp_obj, host_name, host_func);
+
+            // add host function "func-sub"
+            let host_func =
+                we_ffi::WasmEdge_HostFunctionCreate(host_ftype.raw, Some(extern_sub), 0);
+            let x = CString::new("func-sub").unwrap();
+            let host_name = we_ffi::WasmEdge_StringCreateByCString(x.as_ptr());
+            we_ffi::WasmEdge_ImportObjectAddHostFunction(imp_obj, host_name, host_func);
+
+            // add host function "func-mul"
+            let host_func =
+                we_ffi::WasmEdge_HostFunctionCreate(host_ftype.raw, Some(extern_mul), 0);
+            let x = CString::new("func-mul").unwrap();
+            let host_name = we_ffi::WasmEdge_StringCreateByCString(x.as_ptr());
+            we_ffi::WasmEdge_ImportObjectAddHostFunction(imp_obj, host_name, host_func);
+
+            // add host function "func-div"
+            let host_func =
+                we_ffi::WasmEdge_HostFunctionCreate(host_ftype.raw, Some(extern_div), 0);
+            let x = CString::new("func-div").unwrap();
+            let host_name = we_ffi::WasmEdge_StringCreateByCString(x.as_ptr());
+            we_ffi::WasmEdge_ImportObjectAddHostFunction(imp_obj, host_name, host_func);
+
+            let param = [
+                WasmEdgeValType::WasmEdge_ValType_ExternRef,
+                WasmEdgeValType::WasmEdge_ValType_I32,
+            ];
+            let result = [WasmEdgeValType::WasmEdge_ValType_I32];
+            let host_ftype = FunctionTypeContext::create(None, &result);
+
+            // add host function "func-term"
+            let host_func =
+                we_ffi::WasmEdge_HostFunctionCreate(host_ftype.raw, Some(extern_term), 0);
+            let x = CString::new("func-term").unwrap();
+            let host_name = we_ffi::WasmEdge_StringCreateByCString(x.as_ptr());
+            we_ffi::WasmEdge_ImportObjectAddHostFunction(imp_obj, host_name, host_func);
+
+            // add host function "func-fail"
+            let host_func =
+                we_ffi::WasmEdge_HostFunctionCreate(host_ftype.raw, Some(extern_fail), 0);
+            let x = CString::new("func-fail").unwrap();
+            let host_name = we_ffi::WasmEdge_StringCreateByCString(x.as_ptr());
+            we_ffi::WasmEdge_ImportObjectAddHostFunction(imp_obj, host_name, host_func);
+
+            Some(imp_obj)
+        }
+        // // create import object
+        // let mut imp_obj = ImportObjectContext::create(name, ptr::null_mut())?;
+
+        // let param = [
+        //     WasmEdgeValType::WasmEdge_ValType_ExternRef,
+        //     WasmEdgeValType::WasmEdge_ValType_I32,
+        // ];
+        // let result = [WasmEdgeValType::WasmEdge_ValType_I32];
+        // let host_ftype = WasmEdgeFunctionTypeContext::create(&param, &result);
+
+        // // add host function "func-add"
+        // let host_name = "func-add";
+        // let mut host_func: WasmEdgeHostFunctionContext = if is_wrap {
+        //     // WasmEdgeHostFunctionContext::create_binding(
+        //     //     &host_ftype,
+        //     //     extern_wrap,
+        //     //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
+        //     //     0,
+        //     // )
+        //     todo!()
+        // } else {
+        //     WasmEdgeHostFunctionContext::create(&host_ftype, Some(extern_add), 0)
+        // };
+        // imp_obj.add_host_function(host_name, &mut host_func);
+        // Some(imp_obj)
+    }
+
+    fn load_module(conf: &ConfigureContext) -> Option<ASTModuleContext> {
+        let mut module = ASTModuleContext::default();
+        let mut loader = LoaderContext::create(conf)?;
+        loader.parse_from_file(&mut module, TPATH);
+        Some(module)
+    }
+
+    fn validate_module(conf: &ConfigureContext, ast_mod: &ASTModuleContext) -> bool {
+        let res = Validator::create(conf);
+        match res {
+            None => false,
+            Some(mut validator) => {
+                let res = validator.validate(ast_mod);
+                match res {
+                    Err(_) => false,
+                    Ok(_) => true,
+                }
+            }
+        }
+    }
+
+    fn instantiate_module(
+        conf: &ConfigureContext,
+        store: &mut StoreContext,
+        ast_mod: &ASTModuleContext,
+        imp_obj: *const we_ffi::WasmEdge_ImportObjectContext,
+    ) -> bool {
+        let res = InterpreterContext::create(Some(conf), None);
+        if res.is_none() {
+            return false;
+        }
+        let mut interp = res.unwrap();
+        if !interp.register_import_object_module(store, imp_obj) {
+            return false;
+        }
+        // if !interp.register_ast_module(store, ast_mod, "module") {
+        //     return false;
+        // }
+        // if !interp.instantiate(store, ast_mod) {
+        //     return false;
+        // }
+        true
+    }
+
+    #[no_mangle]
+    unsafe extern "C" fn extern_add(
+        data: *mut std::os::raw::c_void,
+        mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+        params: *const WasmEdgeValue,
+        returns: *mut WasmEdgeValue,
+    ) -> we_ffi::WasmEdge_Result {
+        let params = std::slice::from_raw_parts(params, 2);
+        let val1 = *(WasmEdgeValueGetExternRef(params[0]) as *const ::std::os::raw::c_int);
+        let val2 = WasmEdgeValueGetI32(params[1]);
+        let res = WasmEdgeValueGenI32(val1 + val2);
+        returns.write(res);
+
+        we_ffi::WasmEdge_Result { Code: 0 }
+    }
+
+    #[no_mangle]
+    unsafe extern "C" fn extern_sub(
+        data: *mut std::os::raw::c_void,
+        mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+        params: *const WasmEdgeValue,
+        returns: *mut WasmEdgeValue,
+    ) -> we_ffi::WasmEdge_Result {
+        let params = std::slice::from_raw_parts(params, 2);
+        let val1 = *(WasmEdgeValueGetExternRef(params[0]) as *const ::std::os::raw::c_int);
+        let val2 = WasmEdgeValueGetI32(params[1]);
+        let res = WasmEdgeValueGenI32(val1 - val2);
+        returns.write(res);
+
+        we_ffi::WasmEdge_Result { Code: 0 }
+    }
+
+    #[no_mangle]
+    unsafe extern "C" fn extern_mul(
+        data: *mut std::os::raw::c_void,
+        mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+        params: *const WasmEdgeValue,
+        returns: *mut WasmEdgeValue,
+    ) -> we_ffi::WasmEdge_Result {
+        let params = std::slice::from_raw_parts(params, 2);
+        let val1 = *(WasmEdgeValueGetExternRef(params[0]) as *const ::std::os::raw::c_int);
+        let val2 = WasmEdgeValueGetI32(params[1]);
+        let res = WasmEdgeValueGenI32(val1 * val2);
+        returns.write(res);
+
+        we_ffi::WasmEdge_Result { Code: 0 }
+    }
+
+    #[no_mangle]
+    unsafe extern "C" fn extern_div(
+        data: *mut std::os::raw::c_void,
+        mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+        params: *const WasmEdgeValue,
+        returns: *mut WasmEdgeValue,
+    ) -> we_ffi::WasmEdge_Result {
+        let params = std::slice::from_raw_parts(params, 2);
+        let val1 = *(WasmEdgeValueGetExternRef(params[0]) as *const ::std::os::raw::c_int);
+        let val2 = WasmEdgeValueGetI32(params[1]);
+        let res = WasmEdgeValueGenI32(val1 / val2);
+        returns.write(res);
+
+        we_ffi::WasmEdge_Result { Code: 0 }
+    }
+
+    #[no_mangle]
+    unsafe extern "C" fn extern_term(
+        data: *mut std::os::raw::c_void,
+        mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+        params: *const WasmEdgeValue,
+        returns: *mut WasmEdgeValue,
+    ) -> we_ffi::WasmEdge_Result {
+        let res = WasmEdgeValueGenI32(1234);
+        returns.write(res);
+
+        we_ffi::WasmEdge_Result { Code: 1 }
+    }
+
+    #[no_mangle]
+    unsafe extern "C" fn extern_fail(
+        data: *mut std::os::raw::c_void,
+        mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+        params: *const WasmEdgeValue,
+        returns: *mut WasmEdgeValue,
+    ) -> we_ffi::WasmEdge_Result {
+        let res = WasmEdgeValueGenI32(5678);
+        returns.write(res);
+
+        we_ffi::WasmEdge_Result { Code: 2 }
+    }
 }
