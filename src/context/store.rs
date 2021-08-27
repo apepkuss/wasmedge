@@ -1,5 +1,10 @@
 use crate::{
-    context::vm::VMContext, instance::memory::MemoryInstanceContext, types::WasmEdgeString,
+    context::vm::VMContext,
+    error::WasmEdgeResult,
+    instance::{function::FunctionInstanceContext, memory::MemoryInstanceContext},
+    types::WasmEdgeString,
+    types::WasmEdgeValue,
+    utils::check,
 };
 use std::marker::PhantomData;
 use std::mem;
@@ -14,6 +19,19 @@ impl<'vm> StoreContext<'vm> {
         StoreContext {
             raw: unsafe { we_ffi::WasmEdge_StoreCreate() },
             _marker: PhantomData,
+        }
+    }
+
+    pub fn find_function(&self, func_name: &str) -> Option<FunctionInstanceContext> {
+        let func_name = WasmEdgeString::from_str(func_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", func_name).as_str());
+        let raw = unsafe { we_ffi::WasmEdge_StoreFindFunction(self.raw, func_name.raw) };
+        match raw.is_null() {
+            true => None,
+            false => Some(FunctionInstanceContext {
+                raw,
+                _marker: PhantomData,
+            }),
         }
     }
 
@@ -43,6 +61,24 @@ impl<'vm> StoreContext<'vm> {
 
     pub fn list_function_len(&self) -> usize {
         unsafe { we_ffi::WasmEdge_StoreListFunctionLength(self.raw) as usize }
+    }
+
+    pub fn list_function<'a>(
+        &self,
+        names: &'a mut [mem::MaybeUninit<WasmEdgeString>],
+    ) -> (usize, &'a [WasmEdgeString]) {
+        unsafe {
+            let len = we_ffi::WasmEdge_StoreListFunction(
+                self.raw,
+                names.as_ptr() as *mut _,
+                names.len() as u32,
+            );
+
+            (
+                len as usize,
+                mem::MaybeUninit::slice_assume_init_ref(&names[..names.len()]),
+            )
+        }
     }
 
     pub fn list_function_registered_len(&self, mod_name: &str) -> usize {
@@ -197,6 +233,22 @@ mod tests {
         assert!(validate_module(&conf, &ast_mod));
         assert!(instantiate_module(&conf, &mut store, &ast_mod, imp_obj));
 
+        // Store list function exports
+        assert_eq!(store.list_function_len(), 11);
+        let mut names = mem::MaybeUninit::uninit_array::<4>();
+        let (len, names) = store.list_function(&mut names);
+        assert_eq!(len, 11);
+        for name in names.into_iter() {
+            drop(name);
+        }
+        let mut names = mem::MaybeUninit::uninit_array::<15>();
+        let (len, names) = store.list_function(&mut names);
+        assert_eq!(len, 11);
+
+        // store find function
+        let res = store.find_function(names[7].to_string_lossy().into_owned().as_str());
+        assert!(res.is_none());
+
         // unsafe { we_ffi::WasmEdge_ImportObjectDelete(imp_obj) };
     }
 
@@ -328,12 +380,12 @@ mod tests {
         if !interp.register_import_object_module(store, imp_obj) {
             return false;
         }
-        // if !interp.register_ast_module(store, ast_mod, "module") {
-        //     return false;
-        // }
-        // if !interp.instantiate(store, ast_mod) {
-        //     return false;
-        // }
+        if !interp.register_ast_module(store, ast_mod, "module") {
+            return false;
+        }
+        if !interp.instantiate(store, ast_mod) {
+            return false;
+        }
         true
     }
 

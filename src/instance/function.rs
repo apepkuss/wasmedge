@@ -1,4 +1,5 @@
-use crate::types::WasmEdgeValType;
+use crate::{context::store::StoreContext, types::WasmEdgeValType};
+use std::marker::PhantomData;
 use std::{mem, ptr};
 use wasmedge_sys::ffi as we_ffi;
 
@@ -101,6 +102,11 @@ impl Drop for HostFunctionContext {
     fn drop(&mut self) {
         unsafe { we_ffi::WasmEdge_HostFunctionDelete(self.raw) }
     }
+}
+
+pub struct FunctionInstanceContext<'store, 'vm> {
+    pub(crate) raw: *mut we_ffi::WasmEdge_FunctionInstanceContext,
+    pub(crate) _marker: PhantomData<&'store StoreContext<'vm>>,
 }
 
 #[cfg(test)]
