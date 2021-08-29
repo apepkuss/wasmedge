@@ -1,16 +1,16 @@
 #[derive(Debug)]
 pub struct WasmEdgeError {
-    code: u32,
-    message: String,
+    pub code: u32,
+    pub message: String,
 }
-impl WasmEdgeError {
-    pub fn new<T: std::convert::Into<String>>(code: u32, message: T) -> Self {
-        WasmEdgeError {
-            code,
-            message: message.into(),
-        }
-    }
-}
+// impl WasmEdgeError {
+//     pub fn new<T: std::convert::Into<String>>(code: u32, message: T) -> Self {
+//         WasmEdgeError {
+//             code,
+//             message: message.into(),
+//         }
+//     }
+// }
 impl std::fmt::Display for WasmEdgeError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
         self.message.fmt(f)

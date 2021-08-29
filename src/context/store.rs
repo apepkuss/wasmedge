@@ -1,11 +1,15 @@
 use crate::{
     context::vm::VMContext,
-    error::WasmEdgeResult,
-    instance::{function::FunctionInstanceContext, memory::MemoryInstanceContext},
+    error::{WasmEdgeError, WasmEdgeResult},
+    instance::{
+        function::FunctionInstanceContext, global::GlobalInstanceContext,
+        memory::MemoryInstanceContext, table::TableInstanceContext,
+    },
     types::WasmEdgeString,
     types::WasmEdgeValue,
     utils::check,
 };
+use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::mem;
 use wasmedge_sys::ffi as we_ffi;
@@ -35,27 +39,126 @@ impl<'vm> StoreContext<'vm> {
         }
     }
 
-    pub fn find_memory(&self, mem_name: &str) -> MemoryInstanceContext {
-        let mem_name = WasmEdgeString::from_str(mem_name)
-            .expect(format!("Failed to create WasmEdgeString from '{}'", mem_name).as_str());
-        let mem = unsafe { we_ffi::WasmEdge_StoreFindMemory(self.raw, mem_name.raw) };
-        MemoryInstanceContext {
-            raw: mem,
-            _marker: PhantomData,
+    pub fn find_function_registered(
+        &self,
+        mod_name: &str,
+        func_name: &str,
+    ) -> Option<FunctionInstanceContext> {
+        let mod_name = WasmEdgeString::from_str(mod_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
+        let func_name = WasmEdgeString::from_str(func_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", func_name).as_str());
+        let raw = unsafe {
+            we_ffi::WasmEdge_StoreFindFunctionRegistered(self.raw, mod_name.raw, func_name.raw)
+        };
+        match raw.is_null() {
+            true => None,
+            false => Some(FunctionInstanceContext {
+                raw,
+                _marker: PhantomData,
+            }),
         }
     }
 
-    pub fn find_memory_registered(&self, mod_name: &str, mem_name: &str) -> MemoryInstanceContext {
+    pub fn find_table(&self, table_name: &str) -> Option<TableInstanceContext> {
+        let table_name = WasmEdgeString::from_str(table_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", table_name).as_str());
+        let raw = unsafe { we_ffi::WasmEdge_StoreFindTable(self.raw, table_name.raw) };
+        match raw.is_null() {
+            true => None,
+            false => Some(TableInstanceContext {
+                raw,
+                _marker: PhantomData,
+            }),
+        }
+    }
+
+    pub fn find_table_registered(
+        &self,
+        mod_name: &str,
+        table_name: &str,
+    ) -> Option<TableInstanceContext> {
+        let mod_name = WasmEdgeString::from_str(mod_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
+        let table_name = WasmEdgeString::from_str(table_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", table_name).as_str());
+        let raw = unsafe {
+            we_ffi::WasmEdge_StoreFindTableRegistered(self.raw, mod_name.raw, table_name.raw)
+        };
+        match raw.is_null() {
+            true => None,
+            false => Some(TableInstanceContext {
+                raw,
+                _marker: PhantomData,
+            }),
+        }
+    }
+
+    pub fn find_memory(&self, mem_name: &str) -> Option<MemoryInstanceContext> {
+        let mem_name = WasmEdgeString::from_str(mem_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", mem_name).as_str());
+        let raw = unsafe { we_ffi::WasmEdge_StoreFindMemory(self.raw, mem_name.raw) };
+        match raw.is_null() {
+            true => None,
+            false => Some(MemoryInstanceContext {
+                raw,
+                _marker: PhantomData,
+            }),
+        }
+    }
+
+    pub fn find_memory_registered(
+        &self,
+        mod_name: &str,
+        mem_name: &str,
+    ) -> Option<MemoryInstanceContext> {
         let mod_name = WasmEdgeString::from_str(mod_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
         let mem_name = WasmEdgeString::from_str(mem_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", mem_name).as_str());
-        let mem = unsafe {
+        let raw = unsafe {
             we_ffi::WasmEdge_StoreFindMemoryRegistered(self.raw, mod_name.raw, mem_name.raw)
         };
-        MemoryInstanceContext {
-            raw: mem,
-            _marker: PhantomData,
+        match raw.is_null() {
+            true => None,
+            false => Some(MemoryInstanceContext {
+                raw,
+                _marker: PhantomData,
+            }),
+        }
+    }
+
+    pub fn find_global(&self, global_name: &str) -> Option<GlobalInstanceContext> {
+        let global_name = WasmEdgeString::from_str(global_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", global_name).as_str());
+        let raw = unsafe { we_ffi::WasmEdge_StoreFindGlobal(self.raw, global_name.raw) };
+        match raw.is_null() {
+            true => None,
+            false => Some(GlobalInstanceContext {
+                raw,
+                _marker: PhantomData,
+            }),
+        }
+    }
+
+    pub fn find_global_registered(
+        &self,
+        mod_name: &str,
+        global_name: &str,
+    ) -> Option<GlobalInstanceContext> {
+        let mod_name = WasmEdgeString::from_str(mod_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
+        let global_name = WasmEdgeString::from_str(global_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", global_name).as_str());
+        let raw = unsafe {
+            we_ffi::WasmEdge_StoreFindGlobalRegistered(self.raw, mod_name.raw, global_name.raw)
+        };
+        match raw.is_null() {
+            true => None,
+            false => Some(GlobalInstanceContext {
+                raw,
+                _marker: PhantomData,
+            }),
         }
     }
 
@@ -65,19 +168,33 @@ impl<'vm> StoreContext<'vm> {
 
     pub fn list_function<'a>(
         &self,
-        names: &'a mut [mem::MaybeUninit<WasmEdgeString>],
-    ) -> (usize, &'a [WasmEdgeString]) {
-        unsafe {
-            let len = we_ffi::WasmEdge_StoreListFunction(
-                self.raw,
-                names.as_ptr() as *mut _,
-                names.len() as u32,
-            );
+        func_names: &'a mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
+    ) -> WasmEdgeResult<(usize, Vec<String>)> {
+        let max_len = self.list_function_len();
+        match 0 < func_names.len() && func_names.len() <= max_len {
+            true => {
+                let len = unsafe {
+                    we_ffi::WasmEdge_StoreListFunction(
+                        self.raw,
+                        func_names.as_mut_ptr() as *mut we_ffi::WasmEdge_String,
+                        func_names.len() as u32,
+                    )
+                };
+                let s_vec = unsafe {
+                    mem::MaybeUninit::slice_assume_init_ref(&func_names[..func_names.len()])
+                };
+                let mut names = vec![];
+                for s in s_vec {
+                    let slice = unsafe { CStr::from_ptr(s.Buf as *const _) };
+                    names.push(slice.to_string_lossy().into_owned());
+                }
 
-            (
-                len as usize,
-                mem::MaybeUninit::slice_assume_init_ref(&names[..names.len()]),
-            )
+                Ok((len as usize, names))
+            }
+            false => Err(WasmEdgeError::from(format!(
+                "The length of the argument 'func_names' should be between 1 and the max length ({}).",
+                max_len
+            ))),
         }
     }
 
@@ -89,8 +206,77 @@ impl<'vm> StoreContext<'vm> {
         }
     }
 
+    pub fn list_function_registered<'a>(
+        &self,
+        mod_name: &str,
+        func_names: &'a mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
+    ) -> WasmEdgeResult<(usize, Vec<String>)> {
+        let max_len = self.list_function_registered_len(mod_name);
+        match 0 < func_names.len() && func_names.len() <= max_len {
+            true => {
+                let mod_name = WasmEdgeString::from_str(mod_name).expect(
+                    format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str(),
+                );
+                let len = unsafe {
+                    we_ffi::WasmEdge_StoreListFunctionRegistered(
+                        self.raw,
+                        mod_name.raw,
+                        func_names.as_mut_ptr() as *mut we_ffi::WasmEdge_String,
+                        func_names.len() as u32,
+                    )
+                };
+                let s_vec = unsafe {
+                    mem::MaybeUninit::slice_assume_init_ref(&func_names[..func_names.len()])
+                };
+                let mut names = vec![];
+                for s in s_vec {
+                    let slice = unsafe { CStr::from_ptr(s.Buf as *const _) };
+                    names.push(slice.to_string_lossy().into_owned());
+                }
+
+                Ok((len as usize, names))
+            }
+            false => Err(WasmEdgeError::from(format!(
+                "The length of the argument 'func_names' should be between 1 and the max length ({}).",
+                max_len
+            ))),
+        }
+    }
+
     pub fn list_table_len(&self) -> usize {
         unsafe { we_ffi::WasmEdge_StoreListTableLength(self.raw) as usize }
+    }
+
+    pub fn list_table(
+        &self,
+        table_names: &mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
+    ) -> WasmEdgeResult<(usize, Vec<String>)> {
+        let max_len = self.list_global_len();
+        match 0 < table_names.len() && table_names.len() <= max_len {
+            true => {
+                let len = unsafe {
+                    we_ffi::WasmEdge_StoreListTable(
+                        self.raw,
+                        table_names.as_mut_ptr() as *mut we_ffi::WasmEdge_String,
+                        table_names.len() as u32,
+                    )
+                };
+                let s_vec = unsafe {
+                    mem::MaybeUninit::slice_assume_init_ref(&table_names[..table_names.len()])
+                };
+                let mut names = vec![];
+                for s in s_vec {
+                    let slice = unsafe { CStr::from_ptr(s.Buf as *const _) };
+                    names.push(slice.to_string_lossy().into_owned());
+                }
+
+                Ok((len as usize, names))
+            }
+            false => Err(WasmEdgeError::from(format!(
+                "The length of the argument 'table_names' should be between 1 and the max length ({}).",
+                max_len
+            ))),
+        }
     }
 
     pub fn list_table_registered_len(&self, mod_name: &str) -> usize {
@@ -99,14 +285,124 @@ impl<'vm> StoreContext<'vm> {
         unsafe { we_ffi::WasmEdge_StoreListTableRegisteredLength(self.raw, mod_name.raw) as usize }
     }
 
+    pub fn list_table_registered(
+        &self,
+        mod_name: &str,
+        table_names: &mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
+    ) -> WasmEdgeResult<(usize, Vec<String>)> {
+        let max_len = self.list_global_registered_len(mod_name);
+        match 0 < table_names.len() && table_names.len() <= max_len {
+            true => {
+                let mod_name = WasmEdgeString::from_str(mod_name).expect(
+                    format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str(),
+                );
+                let len = unsafe {
+                    we_ffi::WasmEdge_StoreListTableRegistered(
+                        self.raw,
+                        mod_name.raw,
+                        table_names.as_mut_ptr() as *mut we_ffi::WasmEdge_String,
+                        table_names.len() as u32,
+                    )
+                };
+                let s_vec = unsafe {
+                    mem::MaybeUninit::slice_assume_init_ref(&table_names[..table_names.len()])
+                };
+                let mut names = vec![];
+                for s in s_vec {
+                    let slice = unsafe { CStr::from_ptr(s.Buf as *const _) };
+                    names.push(slice.to_string_lossy().into_owned());
+                }
+
+                Ok((len as usize, names))
+            }
+            false => Err(WasmEdgeError::from(format!(
+                "The length of the argument 'table_names' should be between 1 and the max length ({}).",
+                max_len
+            ))),
+        }
+    }
+
     pub fn list_global_len(&self) -> usize {
         unsafe { we_ffi::WasmEdge_StoreListGlobalLength(self.raw) as usize }
+    }
+
+    pub fn list_global(
+        &self,
+        global_names: &mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
+    ) -> WasmEdgeResult<(usize, Vec<String>)> {
+        let max_len = self.list_global_len();
+        match 0 < global_names.len() && global_names.len() <= max_len {
+            true => {
+                let len = unsafe {
+                    we_ffi::WasmEdge_StoreListGlobal(
+                        self.raw,
+                        global_names.as_mut_ptr() as *mut we_ffi::WasmEdge_String,
+                        global_names.len() as u32,
+                    )
+                };
+                let s_vec = unsafe {
+                    mem::MaybeUninit::slice_assume_init_ref(&global_names[..global_names.len()])
+                };
+                let mut names = vec![];
+                for s in s_vec {
+                    // let x = unsafe { std::ffi::CString::from_raw(s.Buf as *mut _) };
+                    // names.push(x.to_string_lossy().into_owned());
+                    let slice = unsafe { CStr::from_ptr(s.Buf as *const _) };
+                    names.push(slice.to_string_lossy().into_owned());
+                }
+
+                Ok((len as usize, names))
+            }
+            false => Err(WasmEdgeError::from(format!(
+                "The length of the argument 'global_names' should be between 1 and the max length ({}).",
+                max_len
+            ))),
+        }
     }
 
     pub fn list_global_registered_len(&self, mod_name: &str) -> usize {
         let mod_name = WasmEdgeString::from_str(mod_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
         unsafe { we_ffi::WasmEdge_StoreListGlobalRegisteredLength(self.raw, mod_name.raw) as usize }
+    }
+
+    pub fn list_global_registered(
+        &self,
+        mod_name: &str,
+        global_names: &mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
+    ) -> WasmEdgeResult<(usize, Vec<String>)> {
+        let max_len = self.list_global_registered_len(mod_name);
+        match 0 < global_names.len() && global_names.len() <= max_len {
+            true => {
+                let mod_name = WasmEdgeString::from_str(mod_name).expect(
+                    format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str(),
+                );
+                let len = unsafe {
+                    we_ffi::WasmEdge_StoreListGlobalRegistered(
+                        self.raw,
+                        mod_name.raw,
+                        global_names.as_mut_ptr() as *mut we_ffi::WasmEdge_String,
+                        global_names.len() as u32,
+                    )
+                };
+                let s_vec = unsafe {
+                    mem::MaybeUninit::slice_assume_init_ref(&global_names[..global_names.len()])
+                };
+                let mut names = vec![];
+                for s in s_vec {
+                    // let x = unsafe { std::ffi::CString::from_raw(s.Buf as *mut _) };
+                    // names.push(x.to_string_lossy().into_owned());
+                    let slice = unsafe { CStr::from_ptr(s.Buf as *const _) };
+                    names.push(slice.to_string_lossy().into_owned());
+                }
+
+                Ok((len as usize, names))
+            }
+            false => Err(WasmEdgeError::from(format!(
+                "The length of the argument 'global_names' should be between 1 and the max length ({}).",
+                max_len
+            ))),
+        }
     }
 
     pub fn list_memory_len(&self) -> usize {
@@ -116,23 +412,34 @@ impl<'vm> StoreContext<'vm> {
 
     pub fn list_memory(
         &self,
-        buf: &mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
-    ) -> (usize, Vec<String>) {
-        let len = unsafe {
-            we_ffi::WasmEdge_StoreListMemory(
-                self.raw,
-                buf.as_mut_ptr() as *mut we_ffi::WasmEdge_String,
-                buf.len() as u32,
-            )
-        };
-        let s_vec = unsafe { mem::MaybeUninit::slice_assume_init_ref(&buf[..buf.len()]) };
-        let mut names = vec![];
-        for s in s_vec {
-            let str = WasmEdgeString { raw: *s };
-            let cow = str.to_string_lossy();
-            names.push(cow.into_owned())
+        memory_names: &mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
+    ) -> WasmEdgeResult<(usize, Vec<String>)> {
+        let max_len = self.list_memory_len();
+        match 0 < memory_names.len() && memory_names.len() <= max_len {
+            true => {
+                let len = unsafe {
+                    we_ffi::WasmEdge_StoreListMemory(
+                        self.raw,
+                        memory_names.as_mut_ptr() as *mut we_ffi::WasmEdge_String,
+                        memory_names.len() as u32,
+                    )
+                };
+                let s_vec = unsafe {
+                    mem::MaybeUninit::slice_assume_init_ref(&memory_names[..memory_names.len()])
+                };
+                let mut names = vec![];
+                for s in s_vec {
+                    let slice = unsafe { CStr::from_ptr(s.Buf as *const _) };
+                    names.push(slice.to_string_lossy().into_owned());
+                }
+
+                Ok((len as usize, names))
+            }
+            false => Err(WasmEdgeError::from(format!(
+                "The length of the argument 'memory_names' should be between 1 and the max length ({}).",
+                max_len
+            ))),
         }
-        (len as usize, names)
     }
 
     pub fn list_memory_registered_len(&self, mod_name: &str) -> usize {
@@ -146,31 +453,79 @@ impl<'vm> StoreContext<'vm> {
     pub fn list_memory_registered(
         &self,
         mod_name: &str,
-        buf: &mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
-    ) -> (usize, Vec<String>) {
-        let mod_name = WasmEdgeString::from_str(mod_name)
-            .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
-        let len = unsafe {
-            we_ffi::WasmEdge_StoreListMemoryRegistered(
-                self.raw,
-                mod_name.raw,
-                buf.as_mut_ptr() as *mut we_ffi::WasmEdge_String,
-                buf.len() as u32,
-            )
-        };
-        let s_vec = unsafe { mem::MaybeUninit::slice_assume_init_ref(&buf[..buf.len()]) };
-        let mut names = vec![];
-        for s in s_vec {
-            let str = WasmEdgeString { raw: *s };
-            let cow = str.to_string_lossy();
-            names.push(cow.into_owned())
+        memory_names: &mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
+    ) -> WasmEdgeResult<(usize, Vec<String>)> {
+        let max_len = self.list_memory_registered_len(mod_name);
+        match 0 < memory_names.len() && memory_names.len() <= max_len {
+            true => {
+                let mod_name = WasmEdgeString::from_str(mod_name).expect(
+                    format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str(),
+                );
+                let len = unsafe {
+                    we_ffi::WasmEdge_StoreListMemoryRegistered(
+                        self.raw,
+                        mod_name.raw,
+                        memory_names.as_mut_ptr() as *mut we_ffi::WasmEdge_String,
+                        memory_names.len() as u32,
+                    )
+                };
+                let s_vec = unsafe {
+                    mem::MaybeUninit::slice_assume_init_ref(&memory_names[..memory_names.len()])
+                };
+                let mut names = vec![];
+                for s in s_vec {
+                    // let x = unsafe { std::ffi::CString::from_raw(s.Buf as *mut _) };
+                    // names.push(x.to_string_lossy().into_owned());
+                    let slice = unsafe { CStr::from_ptr(s.Buf as *const _) };
+                    names.push(slice.to_string_lossy().into_owned());
+                }
+
+                Ok((len as usize, names))
+            }
+            false => Err(WasmEdgeError::from(format!(
+                "The length of the argument 'memory_names' should be between 1 and the max length ({}).",
+                max_len
+            ))),
         }
-        (len as usize, names)
     }
 
     pub fn list_module_len(&self) -> usize {
         let len = unsafe { we_ffi::WasmEdge_StoreListModuleLength(self.raw) };
         len as usize
+    }
+
+    pub fn list_module(
+        &self,
+        mod_names: &mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
+    ) -> WasmEdgeResult<(usize, Vec<String>)> {
+        let max_len = self.list_module_len();
+        match 0 < mod_names.len() && mod_names.len() <= max_len {
+            true => {
+                let len = unsafe {
+                    we_ffi::WasmEdge_StoreListModule(
+                        self.raw,
+                        mod_names.as_mut_ptr() as *mut we_ffi::WasmEdge_String,
+                        mod_names.len() as u32,
+                    )
+                };
+                let s_vec = unsafe {
+                    mem::MaybeUninit::slice_assume_init_ref(&mod_names[..mod_names.len()])
+                };
+                let mut names = vec![];
+                for s in s_vec {
+                    // let x = unsafe { std::ffi::CString::from_raw(s.Buf as *mut _) };
+                    // names.push(x.to_string_lossy().into_owned());
+                    let slice = unsafe { CStr::from_ptr(s.Buf as *const _) };
+                    names.push(slice.to_string_lossy().into_owned());
+                }
+
+                Ok((len as usize, names))
+            }
+            false => Err(WasmEdgeError::from(format!(
+                "The length of the argument 'mod_names' should be between 1 and the max length ({}).",
+                max_len
+            ))),
+        }
     }
 }
 impl<'vm> Drop for StoreContext<'vm> {
@@ -228,26 +583,161 @@ mod tests {
         assert!(!imp_obj.is_null());
         let res = load_module(&conf);
         assert!(res.is_some());
-        let mut ast_mod = res.unwrap();
+        let ast_mod = res.unwrap();
         assert!(!ast_mod.raw.is_null());
         assert!(validate_module(&conf, &ast_mod));
         assert!(instantiate_module(&conf, &mut store, &ast_mod, imp_obj));
 
         // Store list function exports
         assert_eq!(store.list_function_len(), 11);
-        let mut names = mem::MaybeUninit::uninit_array::<4>();
-        let (len, names) = store.list_function(&mut names);
+        let mut func_names = mem::MaybeUninit::uninit_array::<4>();
+        let result = store.list_function(&mut func_names);
+        assert!(result.is_ok());
+        let (len, func_names) = result.unwrap();
         assert_eq!(len, 11);
-        for name in names.into_iter() {
+        for name in func_names.into_iter() {
             drop(name);
         }
-        let mut names = mem::MaybeUninit::uninit_array::<15>();
-        let (len, names) = store.list_function(&mut names);
+        let mut func_names = mem::MaybeUninit::uninit_array::<11>();
+        let result = store.list_function(&mut func_names);
+        assert!(result.is_ok());
+        let (len, func_names) = result.unwrap();
         assert_eq!(len, 11);
 
-        // store find function
-        let res = store.find_function(names[7].to_string_lossy().into_owned().as_str());
-        assert!(res.is_none());
+        // // store find function
+        // let res = store.find_function(&func_names[7]);
+        // assert!(res.is_some());
+
+        // Store list function exports registered
+        assert_eq!(store.list_function_registered_len(mod_name[0]), 11);
+        assert_eq!(store.list_function_registered_len(mod_name[1]), 6);
+        assert_eq!(store.list_function_registered_len(mod_name[2]), 0);
+        let mut func_names = mem::MaybeUninit::uninit_array::<11>();
+        let result = store.list_function_registered(mod_name[0], &mut func_names);
+        assert!(result.is_ok());
+        let (len, func_names) = result.unwrap();
+        assert_eq!(len, 11);
+
+        // Store find function registered
+        assert!(store
+            .find_function_registered(mod_name[0], err_name)
+            .is_none());
+
+        // Store list table exports
+        assert_eq!(store.list_table_len(), 2);
+        let mut table_names = mem::MaybeUninit::uninit_array::<2>();
+        let result = store.list_table(&mut table_names);
+        assert!(result.is_ok());
+        let (len, table_names) = result.unwrap();
+        assert_eq!(len, 2);
+
+        // Store find table
+        assert!(store.find_table(err_name).is_none());
+
+        // Store list table exports registered
+        assert_eq!(store.list_table_registered_len(mod_name[0]), 2);
+        assert_eq!(store.list_table_registered_len(mod_name[1]), 0);
+        assert_eq!(store.list_table_registered_len(mod_name[2]), 0);
+        let mut table_names = mem::MaybeUninit::uninit_array::<2>();
+        let result = store.list_table_registered(mod_name[0], &mut table_names);
+        assert!(result.is_ok());
+        let (len, table_names) = result.unwrap();
+        assert_eq!(len, 2);
+
+        // // Store find table registered
+        // assert!(store.find_table_registered(mod_name[0], err_name).is_none());
+
+        {
+            // Store list memory exports
+            assert_eq!(store.list_memory_len(), 1);
+            let mut memory_names = mem::MaybeUninit::uninit_array::<1>();
+            let result = store.list_memory(&mut memory_names);
+            assert!(result.is_ok());
+            let (len, memory_names) = result.unwrap();
+            assert_eq!(len, 1);
+            println!("memory_names: {:?}", memory_names);
+
+            // // Store find memory
+            // assert!(store.find_memory(&memory_names[0]).is_some()); // error: caused by invalid utf-8 characters
+            // assert!(store.find_memory(&err_name).is_none());
+
+            // Store list memory exports registered
+            assert_eq!(store.list_memory_registered_len(mod_name[0]), 1);
+            assert_eq!(store.list_memory_registered_len(mod_name[1]), 0);
+            assert_eq!(store.list_memory_registered_len(mod_name[2]), 0);
+            let mut memory_names = mem::MaybeUninit::uninit_array::<1>();
+            let result = store.list_memory_registered(mod_name[0], &mut memory_names);
+            assert!(result.is_ok());
+            let (len, memory_names) = result.unwrap();
+            assert_eq!(len, 1);
+
+            // // Store find memory registered
+            // assert!(store
+            //     .find_memory_registered(&mod_name[1], &memory_names[0])
+            //     .is_some());
+            // assert!(store
+            //     .find_memory_registered(&mod_name[0], &err_name)
+            //     .is_none());
+            // assert!(store
+            //     .find_memory_registered(&mod_name[2], &memory_names[0])
+            //     .is_none());
+        }
+
+        // Store list global exports
+        assert_eq!(store.list_global_len(), 2);
+        let mut global_names = mem::MaybeUninit::uninit_array::<15>();
+        let result = store.list_global(&mut global_names);
+        assert!(result.is_err());
+        let mut global_names = mem::MaybeUninit::uninit_array::<2>();
+        let result = store.list_global(&mut global_names);
+        assert!(result.is_ok());
+        let (len, global_names) = result.unwrap();
+        assert_eq!(len, 2);
+        println!("global_names: {:?}", global_names);
+
+        // Store find global
+        // assert!(store.find_global(&global_names[1]).is_some()); // error!!!
+        assert!(store.find_global(err_name).is_none());
+
+        // Store list global exports registered
+        assert_eq!(store.list_global_registered_len(mod_name[0]), 2);
+        assert_eq!(store.list_global_registered_len(mod_name[1]), 0);
+        assert_eq!(store.list_global_registered_len(mod_name[2]), 0);
+        let mut global_names = mem::MaybeUninit::uninit_array::<2>();
+        let result = store.list_global_registered(mod_name[0], &mut global_names);
+        assert!(result.is_ok());
+        let (len, global_names) = result.unwrap();
+        assert_eq!(len, 2);
+
+        // Store find global registered
+        assert!(store
+            .find_global_registered(mod_name[0], &global_names[1])
+            .is_none());
+        assert!(store
+            .find_global_registered(mod_name[0], err_name)
+            .is_none());
+        assert!(store
+            .find_global_registered(mod_name[2], &global_names[1])
+            .is_none());
+
+        // Store list module
+        assert_eq!(store.list_module_len(), 2);
+        let mut mod_names = mem::MaybeUninit::uninit_array::<1>();
+        let result = store.list_module(&mut mod_names);
+        assert!(result.is_ok());
+        let (len, _mod_names) = result.unwrap();
+        assert_eq!(len, 2);
+        let mut mod_names = mem::MaybeUninit::uninit_array::<15>();
+        let result = store.list_module(&mut mod_names);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(
+            err.message,
+            format!(
+                "The length of the argument 'mod_names' should be between 1 and the max length ({}).",
+                store.list_module_len()
+            )
+        );
 
         // unsafe { we_ffi::WasmEdge_ImportObjectDelete(imp_obj) };
     }

@@ -30,6 +30,6 @@ pub fn check(result: we_ffi::WasmEdge_Result) -> WasmEdgeResult<u32> {
         let message = CStr::from_ptr(we_ffi::WasmEdge_ResultGetMessage(result))
             .to_string_lossy()
             .into_owned();
-        Err(WasmEdgeError::new(code, message))
+        Err(WasmEdgeError { code, message })
     }
 }
