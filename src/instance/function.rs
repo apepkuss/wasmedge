@@ -104,9 +104,9 @@ impl Drop for HostFunctionContext {
     }
 }
 
-pub struct FunctionInstanceContext<'store, 'vm> {
+pub struct FunctionInstanceContext<'a> {
     pub(crate) raw: *mut we_ffi::WasmEdge_FunctionInstanceContext,
-    pub(crate) _marker: PhantomData<&'store StoreContext<'vm>>,
+    pub(crate) _marker: PhantomData<&'a StoreContext<'a>>,
 }
 
 #[cfg(test)]

@@ -2,11 +2,11 @@ use crate::{context::store::StoreContext, types::*};
 use std::marker::PhantomData;
 use wasmedge_sys::ffi as we_ffi;
 
-pub struct MemoryInstanceContext<'store, 'vm> {
+pub struct MemoryInstanceContext<'a> {
     pub(crate) raw: *mut we_ffi::WasmEdge_MemoryInstanceContext,
-    pub(crate) _marker: PhantomData<&'store StoreContext<'vm>>,
+    pub(crate) _marker: PhantomData<&'a StoreContext<'a>>,
 }
-impl<'store, 'vm> MemoryInstanceContext<'store, 'vm> {
+impl<'a> MemoryInstanceContext<'a> {
     pub fn create(limit: WasmEdgeLimit) -> Self {
         MemoryInstanceContext {
             raw: unsafe { we_ffi::WasmEdge_MemoryInstanceCreate(limit) },
@@ -14,7 +14,7 @@ impl<'store, 'vm> MemoryInstanceContext<'store, 'vm> {
         }
     }
 }
-impl<'store, 'vm> Drop for MemoryInstanceContext<'store, 'vm> {
+impl<'a> Drop for MemoryInstanceContext<'a> {
     fn drop(&mut self) {
         unsafe { we_ffi::WasmEdge_MemoryInstanceDelete(self.raw) }
     }

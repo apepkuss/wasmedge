@@ -9,24 +9,24 @@ use crate::{
     types::WasmEdgeValue,
     utils::check,
 };
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use std::mem;
 use wasmedge_sys::ffi as we_ffi;
 
-pub struct StoreContext<'vm> {
+pub struct StoreContext<'a> {
     pub(crate) raw: *mut we_ffi::WasmEdge_StoreContext,
-    pub(crate) _marker: PhantomData<&'vm VMContext>,
+    pub(crate) _marker: PhantomData<&'a VMContext>,
 }
-impl<'vm> StoreContext<'vm> {
-    pub fn create() -> StoreContext<'vm> {
+impl<'a> StoreContext<'a> {
+    pub fn create() -> Self {
         StoreContext {
             raw: unsafe { we_ffi::WasmEdge_StoreCreate() },
             _marker: PhantomData,
         }
     }
 
-    pub fn find_function(&self, func_name: &str) -> Option<FunctionInstanceContext> {
+    pub fn find_function(&'a self, func_name: &str) -> Option<FunctionInstanceContext<'a>> {
         let func_name = WasmEdgeString::from_str(func_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", func_name).as_str());
         let raw = unsafe { we_ffi::WasmEdge_StoreFindFunction(self.raw, func_name.raw) };
@@ -40,10 +40,10 @@ impl<'vm> StoreContext<'vm> {
     }
 
     pub fn find_function_registered(
-        &self,
+        &'a self,
         mod_name: &str,
         func_name: &str,
-    ) -> Option<FunctionInstanceContext> {
+    ) -> Option<FunctionInstanceContext<'a>> {
         let mod_name = WasmEdgeString::from_str(mod_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
         let func_name = WasmEdgeString::from_str(func_name)
@@ -60,7 +60,7 @@ impl<'vm> StoreContext<'vm> {
         }
     }
 
-    pub fn find_table(&self, table_name: &str) -> Option<TableInstanceContext> {
+    pub fn find_table(&'a self, table_name: &str) -> Option<TableInstanceContext<'a>> {
         let table_name = WasmEdgeString::from_str(table_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", table_name).as_str());
         let raw = unsafe { we_ffi::WasmEdge_StoreFindTable(self.raw, table_name.raw) };
@@ -74,10 +74,10 @@ impl<'vm> StoreContext<'vm> {
     }
 
     pub fn find_table_registered(
-        &self,
+        &'a self,
         mod_name: &str,
         table_name: &str,
-    ) -> Option<TableInstanceContext> {
+    ) -> Option<TableInstanceContext<'a>> {
         let mod_name = WasmEdgeString::from_str(mod_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
         let table_name = WasmEdgeString::from_str(table_name)
@@ -94,7 +94,7 @@ impl<'vm> StoreContext<'vm> {
         }
     }
 
-    pub fn find_memory(&self, mem_name: &str) -> Option<MemoryInstanceContext> {
+    pub fn find_memory(&'a self, mem_name: &str) -> Option<MemoryInstanceContext<'a>> {
         let mem_name = WasmEdgeString::from_str(mem_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", mem_name).as_str());
         let raw = unsafe { we_ffi::WasmEdge_StoreFindMemory(self.raw, mem_name.raw) };
@@ -108,10 +108,10 @@ impl<'vm> StoreContext<'vm> {
     }
 
     pub fn find_memory_registered(
-        &self,
+        &'a self,
         mod_name: &str,
         mem_name: &str,
-    ) -> Option<MemoryInstanceContext> {
+    ) -> Option<MemoryInstanceContext<'a>> {
         let mod_name = WasmEdgeString::from_str(mod_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
         let mem_name = WasmEdgeString::from_str(mem_name)
@@ -128,7 +128,7 @@ impl<'vm> StoreContext<'vm> {
         }
     }
 
-    pub fn find_global(&self, global_name: &str) -> Option<GlobalInstanceContext> {
+    pub fn find_global(&'a self, global_name: &str) -> Option<GlobalInstanceContext<'a>> {
         let global_name = WasmEdgeString::from_str(global_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", global_name).as_str());
         let raw = unsafe { we_ffi::WasmEdge_StoreFindGlobal(self.raw, global_name.raw) };
@@ -142,10 +142,10 @@ impl<'vm> StoreContext<'vm> {
     }
 
     pub fn find_global_registered(
-        &self,
+        &'a self,
         mod_name: &str,
         global_name: &str,
-    ) -> Option<GlobalInstanceContext> {
+    ) -> Option<GlobalInstanceContext<'a>> {
         let mod_name = WasmEdgeString::from_str(mod_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
         let global_name = WasmEdgeString::from_str(global_name)
@@ -166,7 +166,7 @@ impl<'vm> StoreContext<'vm> {
         unsafe { we_ffi::WasmEdge_StoreListFunctionLength(self.raw) as usize }
     }
 
-    pub fn list_function<'a>(
+    pub fn list_function(
         &self,
         func_names: &'a mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
     ) -> WasmEdgeResult<(usize, Vec<String>)> {
@@ -206,7 +206,7 @@ impl<'vm> StoreContext<'vm> {
         }
     }
 
-    pub fn list_function_registered<'a>(
+    pub fn list_function_registered(
         &self,
         mod_name: &str,
         func_names: &'a mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
@@ -604,9 +604,9 @@ mod tests {
         let (len, func_names) = result.unwrap();
         assert_eq!(len, 11);
 
-        // // store find function
-        // let res = store.find_function(&func_names[7]);
-        // assert!(res.is_some());
+        // store find function
+        let res = store.find_function(&func_names[0]);
+        assert!(res.is_some());
 
         // Store list function exports registered
         assert_eq!(store.list_function_registered_len(mod_name[0]), 11);
@@ -630,6 +630,7 @@ mod tests {
         assert!(result.is_ok());
         let (len, table_names) = result.unwrap();
         assert_eq!(len, 2);
+        println!("table_names: {:?}", table_names);
 
         // Store find table
         assert!(store.find_table(err_name).is_none());
@@ -644,44 +645,47 @@ mod tests {
         let (len, table_names) = result.unwrap();
         assert_eq!(len, 2);
 
-        // // Store find table registered
-        // assert!(store.find_table_registered(mod_name[0], err_name).is_none());
+        // Store find table registered
+        println!("table_reg_names: {:?}", table_names);
+        // assert!(store
+        //     .find_table_registered(mod_name[0], &table_names[0])
+        //     .is_some());
+        assert!(store.find_table_registered(mod_name[0], err_name).is_none());
 
-        {
-            // Store list memory exports
-            assert_eq!(store.list_memory_len(), 1);
-            let mut memory_names = mem::MaybeUninit::uninit_array::<1>();
-            let result = store.list_memory(&mut memory_names);
-            assert!(result.is_ok());
-            let (len, memory_names) = result.unwrap();
-            assert_eq!(len, 1);
-            println!("memory_names: {:?}", memory_names);
+        // Store list memory exports
+        assert_eq!(store.list_memory_len(), 1);
+        let mut memory_names = mem::MaybeUninit::uninit_array::<1>();
+        let result = store.list_memory(&mut memory_names);
+        assert!(result.is_ok());
+        let (len, memory_names) = result.unwrap();
+        assert_eq!(len, 1);
+        println!("memory_names: {:?}", memory_names);
 
-            // // Store find memory
-            // assert!(store.find_memory(&memory_names[0]).is_some()); // error: caused by invalid utf-8 characters
-            // assert!(store.find_memory(&err_name).is_none());
+        // Store find memory
+        // assert!(store.find_memory(&memory_names[0]).is_some()); // error: caused by invalid utf-8 characters
+        assert!(store.find_memory(&err_name).is_none());
 
-            // Store list memory exports registered
-            assert_eq!(store.list_memory_registered_len(mod_name[0]), 1);
-            assert_eq!(store.list_memory_registered_len(mod_name[1]), 0);
-            assert_eq!(store.list_memory_registered_len(mod_name[2]), 0);
-            let mut memory_names = mem::MaybeUninit::uninit_array::<1>();
-            let result = store.list_memory_registered(mod_name[0], &mut memory_names);
-            assert!(result.is_ok());
-            let (len, memory_names) = result.unwrap();
-            assert_eq!(len, 1);
+        // Store list memory exports registered
+        assert_eq!(store.list_memory_registered_len(mod_name[0]), 1);
+        assert_eq!(store.list_memory_registered_len(mod_name[1]), 0);
+        assert_eq!(store.list_memory_registered_len(mod_name[2]), 0);
+        let mut memory_names = mem::MaybeUninit::uninit_array::<1>();
+        let result = store.list_memory_registered(mod_name[0], &mut memory_names);
+        assert!(result.is_ok());
+        let (len, memory_names) = result.unwrap();
+        assert_eq!(len, 1);
+        println!("memory_reg_names: {:?}", memory_names);
 
-            // // Store find memory registered
-            // assert!(store
-            //     .find_memory_registered(&mod_name[1], &memory_names[0])
-            //     .is_some());
-            // assert!(store
-            //     .find_memory_registered(&mod_name[0], &err_name)
-            //     .is_none());
-            // assert!(store
-            //     .find_memory_registered(&mod_name[2], &memory_names[0])
-            //     .is_none());
-        }
+        // Store find memory registered
+        // assert!(store
+        //     .find_memory_registered(&mod_name[0], &memory_names[0])
+        //     .is_some());
+        assert!(store
+            .find_memory_registered(&mod_name[0], &err_name)
+            .is_none());
+        assert!(store
+            .find_memory_registered(&mod_name[2], &memory_names[0])
+            .is_none());
 
         // Store list global exports
         assert_eq!(store.list_global_len(), 2);
@@ -696,7 +700,7 @@ mod tests {
         println!("global_names: {:?}", global_names);
 
         // Store find global
-        // assert!(store.find_global(&global_names[1]).is_some()); // error!!!
+        // assert!(store.find_global(&global_names[1]).is_some());
         assert!(store.find_global(err_name).is_none());
 
         // Store list global exports registered
