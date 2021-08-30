@@ -16,7 +16,7 @@ fn test_wasmedge_tensorflow() {
     let mut vm_ctx = VMContext::create(Some(&conf_ctx), None);
 
     // create tensorflow and tensorflowlite modules: mod name: "wasmedge_tensorflow", "wasmedge_tensorflowlite"
-    let mut result: Result<u32, WasmEdgeError>;
+    let mut result: Result<(), WasmEdgeError>;
     let tensorflow_mod = ImportObjectContext::create_tensorflow_import_object();
     result = vm_ctx.register_module_from_import_object(&tensorflow_mod);
     assert!(result.is_ok());
@@ -124,7 +124,7 @@ fn test_wasmedge_run_wasm() {
     let mut vm_ctx = VMContext::create(Some(&conf_ctx), None);
 
     // create tensorflow and tensorflowlite modules: mod name: "wasmedge_tensorflow", "wasmedge_tensorflowlite"
-    let mut result: Result<u32, WasmEdgeError>;
+    let mut result: Result<(), WasmEdgeError>;
     let tensorflow_mod = ImportObjectContext::create_tensorflow_import_object();
     result = vm_ctx.register_module_from_import_object(&tensorflow_mod);
     assert!(result.is_ok());

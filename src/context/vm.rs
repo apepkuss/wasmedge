@@ -40,7 +40,7 @@ impl VMContext {
     pub fn register_module_from_import_object(
         &mut self,
         import_ctx: &ImportObjectContext,
-    ) -> WasmEdgeResult<u32> {
+    ) -> WasmEdgeResult<()> {
         unsafe {
             check(we_ffi::WasmEdge_VMRegisterModuleFromImport(
                 self.raw,
@@ -53,7 +53,7 @@ impl VMContext {
         &mut self,
         mod_name: &str,
         path: P,
-    ) -> WasmEdgeResult<u32> {
+    ) -> WasmEdgeResult<()> {
         let mod_name = WasmEdgeString::from_str(mod_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
         let path = path_to_cstring(path.as_ref())?;

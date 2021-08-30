@@ -21,15 +21,15 @@ pub fn path_to_cstring(path: &Path) -> WasmEdgeResult<CString> {
     }
 }
 
-pub fn check(result: we_ffi::WasmEdge_Result) -> WasmEdgeResult<u32> {
+pub fn check(result: we_ffi::WasmEdge_Result) -> WasmEdgeResult<()> {
     unsafe {
-        let code = we_ffi::WasmEdge_ResultGetCode(result);
-        if we_ffi::WasmEdge_ResultOK(result) {
-            return Ok(code);
+        if !we_ffi::WasmEdge_ResultOK(result) {
+            let code = we_ffi::WasmEdge_ResultGetCode(result) as usize;
+            let message = CStr::from_ptr(we_ffi::WasmEdge_ResultGetMessage(result))
+                .to_string_lossy()
+                .into_owned();
+            return Err(WasmEdgeError { code, message });
         }
-        let message = CStr::from_ptr(we_ffi::WasmEdge_ResultGetMessage(result))
-            .to_string_lossy()
-            .into_owned();
-        Err(WasmEdgeError { code, message })
     }
+    Ok(())
 }
