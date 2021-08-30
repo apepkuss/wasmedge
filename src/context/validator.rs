@@ -15,7 +15,7 @@ impl Validator {
         }
     }
 
-    pub fn validate(&mut self, ast_mod: &ASTModuleContext) -> WasmEdgeResult<u32> {
+    pub fn validate(&mut self, ast_mod: &ASTModuleContext) -> WasmEdgeResult<()> {
         unsafe { check(we_ffi::WasmEdge_ValidatorValidate(self.raw, ast_mod.raw)) }
     }
 }

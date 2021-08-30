@@ -1,3 +1,4 @@
+pub mod aot;
 pub mod ast;
 pub mod configure;
 pub mod import_object;

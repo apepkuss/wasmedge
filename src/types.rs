@@ -9,6 +9,7 @@ pub type HostRegistration = we_ffi::WasmEdge_HostRegistration;
 pub type WasmEdgeLimit = we_ffi::WasmEdge_Limit;
 pub type WasmEdgeRefType = we_ffi::WasmEdge_RefType;
 pub type WasmEdgeMutability = we_ffi::WasmEdge_Mutability;
+pub type CompilerOptimizationLevel = we_ffi::WasmEdge_CompilerOptimizationLevel;
 
 pub struct WasmEdgeString {
     pub(crate) raw: we_ffi::WasmEdge_String,
