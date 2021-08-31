@@ -1,8 +1,9 @@
+use crate::error::WasmEdgeResult;
 use crate::utils::check;
 use crate::{
     context::{
-        ast::ASTModuleContext, configure::ConfigureContext, statistics::StatisticsContext,
-        store::StoreContext,
+        ast::ASTModuleContext, configure::ConfigureContext, import_object::ImportObjectContext,
+        statistics::StatisticsContext, store::StoreContext,
     },
     types::WasmEdgeString,
 };
@@ -35,16 +36,14 @@ impl InterpreterContext {
     pub fn register_import_object_module(
         &mut self,
         store: &mut StoreContext,
-        imp_obj: *const we_ffi::WasmEdge_ImportObjectContext,
-    ) -> bool {
-        let res = unsafe {
+        imp_obj: &ImportObjectContext,
+    ) -> WasmEdgeResult<()> {
+        unsafe {
             check(we_ffi::WasmEdge_InterpreterRegisterImport(
-                self.raw, store.raw, imp_obj,
+                self.raw,
+                store.raw,
+                imp_obj.raw,
             ))
-        };
-        match res {
-            Err(_) => false,
-            Ok(_) => true,
         }
     }
 
@@ -141,10 +140,53 @@ mod tests {
     }
 
     #[test]
-    fn test_interpreter() {
+    fn test_interpreter_register_import_object() {
+        let mut conf = ConfigureContext::create();
+        conf.add_proposal(WasmEdgeProposal::WasmEdge_Proposal_ReferenceTypes);
+
+        // load and validate file
+        let result = load_module(&conf);
+        assert!(result.is_some());
+        let ast_mod = result.unwrap();
+        assert!(!ast_mod.raw.is_null());
+        assert!(validate_module(&conf, &ast_mod));
+
+        // statistics creation and deletion
+        let result = StatisticsContext::create();
+        assert!(result.is_some());
+        let mut stat = result.unwrap();
+        assert!(!stat.raw.is_null());
+
+        // Statistics set cost table
+        let mut cost_table = vec![20u64; 512];
+        stat.set_cost_table(&mut cost_table);
+
+        // Statistics set cost limit
+        let limit = 100000000000000u64;
+        stat.set_cost_limit(limit);
+
+        // Interpreter creation
+        let result = InterpreterContext::create(Some(&conf), Some(&mut stat));
+        assert!(result.is_some());
+        let mut interp = result.unwrap();
+        assert!(!interp.raw.is_null());
+
         // register import object
         let result = create_extern_module("extern_interp", false);
         assert!(result.is_some());
+        let imp_obj = result.unwrap();
+        assert!(!imp_obj.raw.is_null());
+        let result = create_extern_module("extern_interp", false);
+        assert!(result.is_some());
+        let imp_obj2 = result.unwrap();
+
+        let mut store = StoreContext::create();
+        assert!(interp
+            .register_import_object_module(&mut store, &imp_obj)
+            .is_ok());
+        assert!(interp
+            .register_import_object_module(&mut store, &imp_obj2)
+            .is_err());
     }
 
     fn load_module(conf: &ConfigureContext) -> Option<ASTModuleContext> {
@@ -197,6 +239,99 @@ mod tests {
         assert!(result.is_some());
         let mut host_func = result.unwrap();
         imp_obj.add_host_function(host_name, &mut host_func);
+
+        // add host function "func-sub-interp"
+        let host_name = "func-sub-interp";
+        let result = if is_wrap {
+            // WasmEdgeHostFunctionContext::create_binding(
+            //     &host_ftype,
+            //     extern_wrap,
+            //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
+            //     0,
+            // )
+            todo!()
+        } else {
+            HostFunctionContext::create(&host_ftype, Some(extern_sub_interp), 0)
+        };
+        assert!(result.is_some());
+        let mut host_func = result.unwrap();
+        imp_obj.add_host_function(host_name, &mut host_func);
+
+        // add host function "func-mul-interp"
+        let host_name = "func-mul-interp";
+        let result = if is_wrap {
+            // WasmEdgeHostFunctionContext::create_binding(
+            //     &host_ftype,
+            //     extern_wrap,
+            //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
+            //     0,
+            // )
+            todo!()
+        } else {
+            HostFunctionContext::create(&host_ftype, Some(extern_mul_interp), 0)
+        };
+        assert!(result.is_some());
+        let mut host_func = result.unwrap();
+        imp_obj.add_host_function(host_name, &mut host_func);
+
+        // add host function "func-div-interp"
+        let host_name = "func-div-interp";
+        let result = if is_wrap {
+            // WasmEdgeHostFunctionContext::create_binding(
+            //     &host_ftype,
+            //     extern_wrap,
+            //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
+            //     0,
+            // )
+            todo!()
+        } else {
+            HostFunctionContext::create(&host_ftype, Some(extern_div_interp), 0)
+        };
+        assert!(result.is_some());
+        let mut host_func = result.unwrap();
+        imp_obj.add_host_function(host_name, &mut host_func);
+
+        let param = [
+            WasmEdgeValType::WasmEdge_ValType_ExternRef,
+            WasmEdgeValType::WasmEdge_ValType_I32,
+        ];
+        let result = [WasmEdgeValType::WasmEdge_ValType_I32];
+        let host_ftype = FunctionTypeContext::create(None, &result);
+
+        // add host function "func-term-interp"
+        let host_name = "func-term-interp";
+        let result = if is_wrap {
+            // WasmEdgeHostFunctionContext::create_binding(
+            //     &host_ftype,
+            //     extern_wrap,
+            //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
+            //     0,
+            // )
+            todo!()
+        } else {
+            HostFunctionContext::create(&host_ftype, Some(extern_term_interp), 0)
+        };
+        assert!(result.is_some());
+        let mut host_func = result.unwrap();
+        imp_obj.add_host_function(host_name, &mut host_func);
+
+        // add host function "func-fail-interp"
+        let host_name = "func-fail-interp";
+        let result = if is_wrap {
+            // WasmEdgeHostFunctionContext::create_binding(
+            //     &host_ftype,
+            //     extern_wrap,
+            //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
+            //     0,
+            // )
+            todo!()
+        } else {
+            HostFunctionContext::create(&host_ftype, Some(extern_fail_interp), 0)
+        };
+        assert!(result.is_some());
+        let mut host_func = result.unwrap();
+        imp_obj.add_host_function(host_name, &mut host_func);
+
         Some(imp_obj)
     }
 

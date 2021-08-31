@@ -539,10 +539,11 @@ impl<'vm> Drop for StoreContext<'vm> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::instance::function::HostFunctionContext;
     use crate::{
         context::{
-            ast::ASTModuleContext, configure::ConfigureContext, interpreter::InterpreterContext,
-            loader::LoaderContext, validator::Validator,
+            ast::ASTModuleContext, configure::ConfigureContext, import_object::ImportObjectContext,
+            interpreter::InterpreterContext, loader::LoaderContext, validator::Validator,
         },
         instance::function::FunctionTypeContext,
         types::*,
@@ -580,13 +581,13 @@ mod tests {
         let res = create_extern_module("extern", false);
         assert!(res.is_some());
         let imp_obj = res.unwrap();
-        assert!(!imp_obj.is_null());
+        assert!(!imp_obj.raw.is_null());
         let res = load_module(&conf);
         assert!(res.is_some());
         let ast_mod = res.unwrap();
         assert!(!ast_mod.raw.is_null());
         assert!(validate_module(&conf, &ast_mod));
-        assert!(instantiate_module(&conf, &mut store, &ast_mod, imp_obj));
+        assert!(instantiate_module(&conf, &mut store, &ast_mod, &imp_obj));
 
         // Store list function exports
         assert_eq!(store.list_function_len(), 11);
@@ -746,97 +747,129 @@ mod tests {
         // unsafe { we_ffi::WasmEdge_ImportObjectDelete(imp_obj) };
     }
 
-    fn create_extern_module(
-        name: &str,
-        is_wrap: bool,
-    ) -> Option<*mut we_ffi::WasmEdge_ImportObjectContext> {
-        unsafe {
-            // let host_name = WasmEdgeString::from_str(name).unwrap().into_raw();
-            let x = CString::new(name).unwrap();
-            let host_name = we_ffi::WasmEdge_StringCreateByCString(x.as_ptr());
-            let imp_obj = we_ffi::WasmEdge_ImportObjectCreate(host_name, ptr::null_mut());
+    fn create_extern_module(name: &str, is_wrap: bool) -> Option<ImportObjectContext<'_>> {
+        // create import object
+        let result = ImportObjectContext::create(name, ptr::null_mut());
+        assert!(result.is_some());
+        let mut imp_obj = result.unwrap();
 
-            let param = [
-                WasmEdgeValType::WasmEdge_ValType_ExternRef,
-                WasmEdgeValType::WasmEdge_ValType_I32,
-            ];
-            let result = [WasmEdgeValType::WasmEdge_ValType_I32];
-            let host_ftype = FunctionTypeContext::create(Some(&param), &result);
+        let param = [
+            WasmEdgeValType::WasmEdge_ValType_ExternRef,
+            WasmEdgeValType::WasmEdge_ValType_I32,
+        ];
+        let result = [WasmEdgeValType::WasmEdge_ValType_I32];
+        let host_ftype = FunctionTypeContext::create(Some(&param), &result);
 
-            // Add host function "func-add"
-            let host_func =
-                we_ffi::WasmEdge_HostFunctionCreate(host_ftype.raw, Some(extern_add), 0);
-            // let res = HostFunctionContext::create(host_ftype, Some(extern_add), 0);
-            // assert!(res.is_some());
-            // let host_func = res.unwrap();
-            // println!("host_func.raw: {:?}", host_func.raw);
-            let host_name = WasmEdgeString::from_str("func-add").unwrap();
-            we_ffi::WasmEdge_ImportObjectAddHostFunction(imp_obj, host_name.raw, host_func);
+        // add host function "func-add"
+        let host_name = "func-add";
+        let result = if is_wrap {
+            // WasmEdgeHostFunctionContext::create_binding(
+            //     &host_ftype,
+            //     extern_wrap,
+            //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
+            //     0,
+            // )
+            todo!()
+        } else {
+            HostFunctionContext::create(&host_ftype, Some(extern_add), 0)
+        };
+        assert!(result.is_some());
+        let mut host_func = result.unwrap();
+        imp_obj.add_host_function(host_name, &mut host_func);
 
-            // add host function "func-sub"
-            let host_func =
-                we_ffi::WasmEdge_HostFunctionCreate(host_ftype.raw, Some(extern_sub), 0);
-            let host_name = WasmEdgeString::from_str("func-sub").unwrap();
-            we_ffi::WasmEdge_ImportObjectAddHostFunction(imp_obj, host_name.raw, host_func);
+        // add host function "func-sub"
+        let host_name = "func-sub";
+        let result = if is_wrap {
+            // WasmEdgeHostFunctionContext::create_binding(
+            //     &host_ftype,
+            //     extern_wrap,
+            //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
+            //     0,
+            // )
+            todo!()
+        } else {
+            HostFunctionContext::create(&host_ftype, Some(extern_sub), 0)
+        };
+        assert!(result.is_some());
+        let mut host_func = result.unwrap();
+        imp_obj.add_host_function(host_name, &mut host_func);
 
-            // add host function "func-mul"
-            let host_func =
-                we_ffi::WasmEdge_HostFunctionCreate(host_ftype.raw, Some(extern_mul), 0);
-            let host_name = WasmEdgeString::from_str("func-mul").unwrap();
-            we_ffi::WasmEdge_ImportObjectAddHostFunction(imp_obj, host_name.raw, host_func);
+        // add host function "func-mul"
+        let host_name = "func-mul";
+        let result = if is_wrap {
+            // WasmEdgeHostFunctionContext::create_binding(
+            //     &host_ftype,
+            //     extern_wrap,
+            //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
+            //     0,
+            // )
+            todo!()
+        } else {
+            HostFunctionContext::create(&host_ftype, Some(extern_mul), 0)
+        };
+        assert!(result.is_some());
+        let mut host_func = result.unwrap();
+        imp_obj.add_host_function(host_name, &mut host_func);
 
-            // add host function "func-div"
-            let host_func =
-                we_ffi::WasmEdge_HostFunctionCreate(host_ftype.raw, Some(extern_div), 0);
-            let host_name = WasmEdgeString::from_str("func-div").unwrap();
-            we_ffi::WasmEdge_ImportObjectAddHostFunction(imp_obj, host_name.raw, host_func);
+        // add host function "func-div"
+        let host_name = "func-div";
+        let result = if is_wrap {
+            // WasmEdgeHostFunctionContext::create_binding(
+            //     &host_ftype,
+            //     extern_wrap,
+            //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
+            //     0,
+            // )
+            todo!()
+        } else {
+            HostFunctionContext::create(&host_ftype, Some(extern_div), 0)
+        };
+        assert!(result.is_some());
+        let mut host_func = result.unwrap();
+        imp_obj.add_host_function(host_name, &mut host_func);
 
-            let param = [
-                WasmEdgeValType::WasmEdge_ValType_ExternRef,
-                WasmEdgeValType::WasmEdge_ValType_I32,
-            ];
-            let result = [WasmEdgeValType::WasmEdge_ValType_I32];
-            let host_ftype = FunctionTypeContext::create(None, &result);
+        let param = [
+            WasmEdgeValType::WasmEdge_ValType_ExternRef,
+            WasmEdgeValType::WasmEdge_ValType_I32,
+        ];
+        let result = [WasmEdgeValType::WasmEdge_ValType_I32];
+        let host_ftype = FunctionTypeContext::create(None, &result);
 
-            // add host function "func-term"
-            let host_func =
-                we_ffi::WasmEdge_HostFunctionCreate(host_ftype.raw, Some(extern_term), 0);
-            let host_name = WasmEdgeString::from_str("func-term").unwrap();
-            we_ffi::WasmEdge_ImportObjectAddHostFunction(imp_obj, host_name.raw, host_func);
+        // add host function "func-term"
+        let host_name = "func-term";
+        let result = if is_wrap {
+            // WasmEdgeHostFunctionContext::create_binding(
+            //     &host_ftype,
+            //     extern_wrap,
+            //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
+            //     0,
+            // )
+            todo!()
+        } else {
+            HostFunctionContext::create(&host_ftype, Some(extern_term), 0)
+        };
+        assert!(result.is_some());
+        let mut host_func = result.unwrap();
+        imp_obj.add_host_function(host_name, &mut host_func);
 
-            // add host function "func-fail"
-            let host_func =
-                we_ffi::WasmEdge_HostFunctionCreate(host_ftype.raw, Some(extern_fail), 0);
-            let host_name = WasmEdgeString::from_str("func-fail").unwrap();
-            we_ffi::WasmEdge_ImportObjectAddHostFunction(imp_obj, host_name.raw, host_func);
+        // add host function "func-fail"
+        let host_name = "func-fail";
+        let result = if is_wrap {
+            // WasmEdgeHostFunctionContext::create_binding(
+            //     &host_ftype,
+            //     extern_wrap,
+            //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
+            //     0,
+            // )
+            todo!()
+        } else {
+            HostFunctionContext::create(&host_ftype, Some(extern_fail), 0)
+        };
+        assert!(result.is_some());
+        let mut host_func = result.unwrap();
+        imp_obj.add_host_function(host_name, &mut host_func);
 
-            Some(imp_obj)
-        }
-        // // create import object
-        // let mut imp_obj = ImportObjectContext::create(name, ptr::null_mut())?;
-
-        // let param = [
-        //     WasmEdgeValType::WasmEdge_ValType_ExternRef,
-        //     WasmEdgeValType::WasmEdge_ValType_I32,
-        // ];
-        // let result = [WasmEdgeValType::WasmEdge_ValType_I32];
-        // let host_ftype = WasmEdgeFunctionTypeContext::create(&param, &result);
-
-        // // add host function "func-add"
-        // let host_name = "func-add";
-        // let mut host_func: WasmEdgeHostFunctionContext = if is_wrap {
-        //     // WasmEdgeHostFunctionContext::create_binding(
-        //     //     &host_ftype,
-        //     //     extern_wrap,
-        //     //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
-        //     //     0,
-        //     // )
-        //     todo!()
-        // } else {
-        //     WasmEdgeHostFunctionContext::create(&host_ftype, Some(extern_add), 0)
-        // };
-        // imp_obj.add_host_function(host_name, &mut host_func);
-        // Some(imp_obj)
+        Some(imp_obj)
     }
 
     fn load_module(conf: &ConfigureContext) -> Option<ASTModuleContext> {
@@ -864,14 +897,14 @@ mod tests {
         conf: &ConfigureContext,
         store: &mut StoreContext,
         ast_mod: &ASTModuleContext,
-        imp_obj: *const we_ffi::WasmEdge_ImportObjectContext,
+        imp_obj: &ImportObjectContext,
     ) -> bool {
         let res = InterpreterContext::create(Some(conf), None);
         if res.is_none() {
             return false;
         }
         let mut interp = res.unwrap();
-        if !interp.register_import_object_module(store, imp_obj) {
+        if !interp.register_import_object_module(store, imp_obj).is_ok() {
             return false;
         }
         if !interp.register_ast_module(store, ast_mod, "module") {
