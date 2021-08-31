@@ -9,6 +9,7 @@ pub struct WasmEdgeError {
     /// 0x01: Terminated -> Success
     /// 0x02: Failed
     /// 0x03: NullError
+    /// 0x20: File not found
     pub code: usize,
     pub message: String,
 }
