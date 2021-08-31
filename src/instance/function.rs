@@ -78,7 +78,6 @@ impl HostFunctionContext {
         cost: u64,
     ) -> Option<HostFunctionContext> {
         let raw = unsafe { we_ffi::WasmEdge_HostFunctionCreate(func_type.raw, host_func, cost) };
-        println!("raw: {:?}", raw);
         match raw.is_null() {
             true => None,
             false => Some(HostFunctionContext { raw }),
