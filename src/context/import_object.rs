@@ -78,14 +78,18 @@ impl<'vm> ImportObjectContext<'vm> {
         let name = WasmEdgeString::from_str(name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", name).as_str());
         unsafe {
-            we_ffi::WasmEdge_ImportObjectAddHostFunction(self.raw, name.raw, host_func_ctx.raw)
+            we_ffi::WasmEdge_ImportObjectAddHostFunction(self.raw, name.raw, host_func_ctx.raw);
+            host_func_ctx.raw = std::ptr::null_mut();
         }
     }
 
     pub fn add_table(&mut self, name: &str, table_ctx: &mut TableInstanceContext) {
         let name = WasmEdgeString::from_str(name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", name).as_str());
-        unsafe { we_ffi::WasmEdge_ImportObjectAddTable(self.raw, name.raw, table_ctx.raw) }
+        unsafe {
+            we_ffi::WasmEdge_ImportObjectAddTable(self.raw, name.raw, table_ctx.raw);
+            table_ctx.raw = std::ptr::null_mut();
+        }
     }
 
     pub fn add_memory(&mut self, name: &str, mem_ctx: &mut MemoryInstanceContext) {
@@ -93,6 +97,7 @@ impl<'vm> ImportObjectContext<'vm> {
             .expect(format!("Failed to create WasmEdgeString from '{}'", name).as_str());
         unsafe {
             we_ffi::WasmEdge_ImportObjectAddMemory(self.raw, name.raw, mem_ctx.raw);
+            mem_ctx.raw = std::ptr::null_mut();
         }
     }
 
@@ -101,6 +106,7 @@ impl<'vm> ImportObjectContext<'vm> {
             .expect(format!("Failed to create WasmEdgeString from '{}'", name).as_str());
         unsafe {
             we_ffi::WasmEdge_ImportObjectAddGlobal(self.raw, name.raw, global_ctx.raw);
+            global_ctx.raw = std::ptr::null_mut();
         }
     }
 }
