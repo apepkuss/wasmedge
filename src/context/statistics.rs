@@ -11,6 +11,20 @@ impl StatisticsContext {
             false => Some(StatisticsContext { raw }),
         }
     }
+
+    pub fn set_cost_table(&mut self, cost_arr: &mut [u64]) {
+        unsafe {
+            we_ffi::WasmEdge_StatisticsSetCostTable(
+                self.raw,
+                cost_arr.as_mut_ptr(),
+                cost_arr.len() as u32,
+            )
+        }
+    }
+
+    pub fn set_cost_limit(&mut self, limit: u64) {
+        unsafe { we_ffi::WasmEdge_StatisticsSetCostLimit(self.raw, limit) }
+    }
 }
 impl Drop for StatisticsContext {
     fn drop(&mut self) {
