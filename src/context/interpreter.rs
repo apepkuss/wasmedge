@@ -267,13 +267,14 @@ mod tests {
         let returns = result.unwrap();
         assert_eq!(246, WasmEdgeValueGetI32(returns[0]));
         assert_eq!(912, WasmEdgeValueGetI32(returns[1]));
-        // // Function type mismatch
+
+        // ? Function type mismatch
         // let params = [WasmEdgeValueGenI64(123), WasmEdgeValueGenI32(456)];
         // let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<2>();
         // let result = interp.invoke(&mut store, "func-mul-2", Some(&params), &mut buf);
         // assert!(result.is_err());
 
-        // // Function not found
+        // ? Function not found
         // let params = [WasmEdgeValueGenI32(123), WasmEdgeValueGenI32(456)];
         // let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<2>();
         // let result = interp.invoke(&mut store, "func-mul-3", Some(&params), &mut buf);
@@ -398,12 +399,14 @@ mod tests {
         assert!(result.is_some());
         let mut imp_obj = result.unwrap();
 
-        let param = [
+        let params = [
             WasmEdgeValType::WasmEdge_ValType_ExternRef,
             WasmEdgeValType::WasmEdge_ValType_I32,
         ];
-        let result = [WasmEdgeValType::WasmEdge_ValType_I32];
-        let host_ftype = FunctionTypeContext::create(Some(&param), &result);
+        let returns = [WasmEdgeValType::WasmEdge_ValType_I32];
+        let result = FunctionTypeContext::create(Some(&params), Some(&returns));
+        assert!(result.is_some());
+        let host_ftype = result.unwrap();
 
         // add host function "func-add"
         let host_name = "func-add";
@@ -473,12 +476,15 @@ mod tests {
         let mut host_func = result.unwrap();
         imp_obj.add_host_function(host_name, &mut host_func);
 
-        let param = [
+        let params = [
             WasmEdgeValType::WasmEdge_ValType_ExternRef,
             WasmEdgeValType::WasmEdge_ValType_I32,
         ];
-        let result = [WasmEdgeValType::WasmEdge_ValType_I32];
-        let host_ftype = FunctionTypeContext::create(None, &result);
+        let returns = [WasmEdgeValType::WasmEdge_ValType_I32];
+        let result = FunctionTypeContext::create(None, Some(&returns));
+        assert!(result.is_some());
+        let host_ftype = result.unwrap();
+        assert!(!host_ftype.raw.is_null());
 
         // add host function "func-term"
         let host_name = "func-term";

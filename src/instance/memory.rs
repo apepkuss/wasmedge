@@ -58,14 +58,16 @@ mod tests {
         let mut imp_obj = ImportObjectContext::create(mod_name, ptr::null_mut()).unwrap();
 
         // Create and add a host function instance into the import object.
-        let param_list = [
+        let params = [
             WasmEdgeValType::WasmEdge_ValType_I32,
             WasmEdgeValType::WasmEdge_ValType_I32,
         ];
-        let return_list = [WasmEdgeValType::WasmEdge_ValType_I32];
-        let func_type = FunctionTypeContext::create(Some(&param_list), &return_list);
-        let res = HostFunctionContext::create(&func_type, Some(FuncAdd), 0);
-        let mut host_func = res.unwrap();
+        let returns = [WasmEdgeValType::WasmEdge_ValType_I32];
+        let result = FunctionTypeContext::create(Some(&params), Some(&returns));
+        assert!(result.is_some());
+        let func_type = result.unwrap();
+        let result = HostFunctionContext::create(&func_type, Some(FuncAdd), 0);
+        let mut host_func = result.unwrap();
         imp_obj.add_host_function("func-add", &mut host_func);
 
         // register import-object

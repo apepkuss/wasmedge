@@ -753,12 +753,15 @@ mod tests {
         assert!(result.is_some());
         let mut imp_obj = result.unwrap();
 
-        let param = [
+        let params = [
             WasmEdgeValType::WasmEdge_ValType_ExternRef,
             WasmEdgeValType::WasmEdge_ValType_I32,
         ];
-        let result = [WasmEdgeValType::WasmEdge_ValType_I32];
-        let host_ftype = FunctionTypeContext::create(Some(&param), &result);
+        let returns = [WasmEdgeValType::WasmEdge_ValType_I32];
+        let result = FunctionTypeContext::create(Some(&params), Some(&returns));
+        assert!(result.is_some());
+        let host_ftype = result.unwrap();
+        assert!(!host_ftype.raw.is_null());
 
         // add host function "func-add"
         let host_name = "func-add";
@@ -828,12 +831,15 @@ mod tests {
         let mut host_func = result.unwrap();
         imp_obj.add_host_function(host_name, &mut host_func);
 
-        let param = [
+        let params = [
             WasmEdgeValType::WasmEdge_ValType_ExternRef,
             WasmEdgeValType::WasmEdge_ValType_I32,
         ];
-        let result = [WasmEdgeValType::WasmEdge_ValType_I32];
-        let host_ftype = FunctionTypeContext::create(None, &result);
+        let returns = [WasmEdgeValType::WasmEdge_ValType_I32];
+        let result = FunctionTypeContext::create(None, Some(&returns));
+        assert!(result.is_some());
+        let host_ftype = result.unwrap();
+        assert!(!host_ftype.raw.is_null());
 
         // add host function "func-term"
         let host_name = "func-term";
