@@ -25,6 +25,18 @@ impl StatisticsContext {
     pub fn set_cost_limit(&mut self, limit: u64) {
         unsafe { we_ffi::WasmEdge_StatisticsSetCostLimit(self.raw, limit) }
     }
+
+    pub fn get_instr_count(&self) -> usize {
+        unsafe { we_ffi::WasmEdge_StatisticsGetInstrCount(self.raw) as usize }
+    }
+
+    pub fn get_instr_per_second(&self) -> usize {
+        unsafe { we_ffi::WasmEdge_StatisticsGetInstrPerSecond(self.raw) as usize }
+    }
+
+    pub fn get_total_cost(&self) -> usize {
+        unsafe { we_ffi::WasmEdge_StatisticsGetTotalCost(self.raw) as usize }
+    }
 }
 impl Drop for StatisticsContext {
     fn drop(&mut self) {
