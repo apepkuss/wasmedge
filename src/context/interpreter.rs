@@ -5,8 +5,9 @@ use crate::{
         ast::ASTModuleContext, configure::ConfigureContext, import_object::ImportObjectContext,
         statistics::StatisticsContext, store::StoreContext,
     },
-    types::WasmEdgeString,
+    types::{WasmEdgeString, WasmEdgeValue},
 };
+use std::mem;
 use std::ptr;
 use wasmedge_sys::ffi as we_ffi;
 
@@ -52,34 +53,85 @@ impl InterpreterContext {
         store: &mut StoreContext,
         ast_mod: &ASTModuleContext,
         mod_name: &str,
-    ) -> bool {
+    ) -> WasmEdgeResult<()> {
         let mod_name = WasmEdgeString::from_str(mod_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
-        let res = unsafe {
+        unsafe {
             check(we_ffi::WasmEdge_InterpreterRegisterModule(
                 self.raw,
                 store.raw,
                 ast_mod.raw,
                 mod_name.raw,
             ))
-        };
-        match res {
-            Err(_) => false,
-            Ok(_) => true,
         }
     }
 
-    pub fn instantiate(&mut self, store: &mut StoreContext, ast_mod: &ASTModuleContext) -> bool {
-        let res = unsafe {
+    pub fn instantiate(
+        &mut self,
+        store: &mut StoreContext,
+        ast_mod: &ASTModuleContext,
+    ) -> WasmEdgeResult<()> {
+        unsafe {
             check(we_ffi::WasmEdge_InterpreterInstantiate(
                 self.raw,
                 store.raw,
                 ast_mod.raw,
             ))
-        };
-        match res {
-            Err(_) => false,
-            Ok(_) => true,
+        }
+    }
+
+    /// Invoke a WASM function by name.
+    pub fn invoke<'a>(
+        &self,
+        store: &mut StoreContext,
+        func_name: &str,
+        params: &[WasmEdgeValue],
+        buf: &'a mut [mem::MaybeUninit<WasmEdgeValue>],
+    ) -> WasmEdgeResult<&'a [WasmEdgeValue]> {
+        let func_name = WasmEdgeString::from_str(func_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", func_name).as_str());
+
+        unsafe {
+            check(we_ffi::WasmEdge_InterpreterInvoke(
+                self.raw,
+                store.raw,
+                func_name.raw,
+                params.as_ptr() as *const _,
+                params.len() as u32,
+                buf.as_mut_ptr() as *mut _,
+                buf.len() as u32,
+            ))?;
+
+            Ok(mem::MaybeUninit::slice_assume_init_ref(&buf[..buf.len()]))
+        }
+    }
+
+    pub fn invoke_registered<'a>(
+        &self,
+        store: &mut StoreContext,
+        mod_name: &str,
+        func_name: &str,
+        params: &[WasmEdgeValue],
+        buf: &'a mut [mem::MaybeUninit<WasmEdgeValue>],
+    ) -> WasmEdgeResult<&'a [WasmEdgeValue]> {
+        let mod_name = WasmEdgeString::from_str(mod_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
+        let func_name = WasmEdgeString::from_str(func_name)
+            .expect(format!("Failed to create WasmEdgeString from '{}'", func_name).as_str());
+
+        unsafe {
+            check(we_ffi::WasmEdge_InterpreterInvokeRegistered(
+                self.raw,
+                store.raw,
+                mod_name.raw,
+                func_name.raw,
+                params.as_ptr() as *const _,
+                params.len() as u32,
+                buf.as_mut_ptr() as *mut _,
+                buf.len() as u32,
+            ))?;
+
+            Ok(mem::MaybeUninit::slice_assume_init_ref(&buf[..buf.len()]))
         }
     }
 }
@@ -140,7 +192,7 @@ mod tests {
     }
 
     #[test]
-    fn test_interpreter_register_import_object() {
+    fn test_interpreter_register() {
         let mut conf = ConfigureContext::create();
         conf.add_proposal(WasmEdgeProposal::WasmEdge_Proposal_ReferenceTypes);
 
@@ -172,21 +224,61 @@ mod tests {
         assert!(!interp.raw.is_null());
 
         // register import object
-        let result = create_extern_module("extern_interp", false);
+        let result = create_extern_module("extern", false);
         assert!(result.is_some());
         let imp_obj = result.unwrap();
         assert!(!imp_obj.raw.is_null());
-        let result = create_extern_module("extern_interp", false);
-        assert!(result.is_some());
-        let imp_obj2 = result.unwrap();
+        // let result = create_extern_module("extern_interp", false); // ! error: module name conflict
+        // assert!(result.is_some());
+        // let imp_obj2 = result.unwrap();
 
         let mut store = StoreContext::create();
         assert!(interp
             .register_import_object_module(&mut store, &imp_obj)
             .is_ok());
+        // assert!(interp
+        //     .register_import_object_module(&mut store, &imp_obj2)
+        //     .is_err());
+
+        // register wasm module
         assert!(interp
-            .register_import_object_module(&mut store, &imp_obj2)
-            .is_err());
+            .register_ast_module(&mut store, &ast_mod, "module")
+            .is_ok());
+
+        // instantiate wasm module
+        assert!(interp.instantiate(&mut store, &ast_mod).is_ok());
+        // override instantiated wasm
+        assert!(interp.instantiate(&mut store, &ast_mod).is_ok());
+
+        // invoke functions
+        let params = [WasmEdgeValueGenI32(123), WasmEdgeValueGenI32(456)];
+        let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<2>();
+        let result = interp.invoke(&mut store, "func-mul-2", &params, &mut buf);
+        assert!(result.is_ok());
+        let returns = result.unwrap();
+        assert_eq!(246, WasmEdgeValueGetI32(returns[0]));
+        assert_eq!(912, WasmEdgeValueGetI32(returns[1]));
+        // // Function type mismatch
+        // let params = [WasmEdgeValueGenI64(123), WasmEdgeValueGenI32(456)];
+        // let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<2>();
+        // let result = interp.invoke(&mut store, "func-mul-2", &params, &mut buf);
+        // assert!(result.is_err());
+
+        // // Function not found
+        // let params = [WasmEdgeValueGenI32(123), WasmEdgeValueGenI32(456)];
+        // let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<2>();
+        // let result = interp.invoke(&mut store, "func-mul-3", &params, &mut buf);
+        // assert!(result.is_err());
+
+        // Discard result
+        let params = [WasmEdgeValueGenI32(123), WasmEdgeValueGenI32(456)];
+        let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<0>();
+        let result = interp.invoke(&mut store, "func-mul-2", &params, &mut buf);
+        assert!(result.is_ok());
+        let params = [WasmEdgeValueGenI32(123), WasmEdgeValueGenI32(456)];
+        let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<1>();
+        let result = interp.invoke(&mut store, "func-mul-2", &params, &mut buf);
+        assert!(result.is_ok());
     }
 
     fn load_module(conf: &ConfigureContext) -> Option<ASTModuleContext> {
@@ -223,8 +315,8 @@ mod tests {
         let result = [WasmEdgeValType::WasmEdge_ValType_I32];
         let host_ftype = FunctionTypeContext::create(Some(&param), &result);
 
-        // add host function "func-add-interp"
-        let host_name = "func-add-interp";
+        // add host function "func-add"
+        let host_name = "func-add";
         let result = if is_wrap {
             // WasmEdgeHostFunctionContext::create_binding(
             //     &host_ftype,
@@ -240,8 +332,8 @@ mod tests {
         let mut host_func = result.unwrap();
         imp_obj.add_host_function(host_name, &mut host_func);
 
-        // add host function "func-sub-interp"
-        let host_name = "func-sub-interp";
+        // add host function "func-sub"
+        let host_name = "func-sub";
         let result = if is_wrap {
             // WasmEdgeHostFunctionContext::create_binding(
             //     &host_ftype,
@@ -257,8 +349,8 @@ mod tests {
         let mut host_func = result.unwrap();
         imp_obj.add_host_function(host_name, &mut host_func);
 
-        // add host function "func-mul-interp"
-        let host_name = "func-mul-interp";
+        // add host function "func-mul"
+        let host_name = "func-mul";
         let result = if is_wrap {
             // WasmEdgeHostFunctionContext::create_binding(
             //     &host_ftype,
@@ -274,8 +366,8 @@ mod tests {
         let mut host_func = result.unwrap();
         imp_obj.add_host_function(host_name, &mut host_func);
 
-        // add host function "func-div-interp"
-        let host_name = "func-div-interp";
+        // add host function "func-div"
+        let host_name = "func-div";
         let result = if is_wrap {
             // WasmEdgeHostFunctionContext::create_binding(
             //     &host_ftype,
@@ -298,8 +390,8 @@ mod tests {
         let result = [WasmEdgeValType::WasmEdge_ValType_I32];
         let host_ftype = FunctionTypeContext::create(None, &result);
 
-        // add host function "func-term-interp"
-        let host_name = "func-term-interp";
+        // add host function "func-term"
+        let host_name = "func-term";
         let result = if is_wrap {
             // WasmEdgeHostFunctionContext::create_binding(
             //     &host_ftype,
@@ -315,8 +407,8 @@ mod tests {
         let mut host_func = result.unwrap();
         imp_obj.add_host_function(host_name, &mut host_func);
 
-        // add host function "func-fail-interp"
-        let host_name = "func-fail-interp";
+        // add host function "func-fail"
+        let host_name = "func-fail";
         let result = if is_wrap {
             // WasmEdgeHostFunctionContext::create_binding(
             //     &host_ftype,

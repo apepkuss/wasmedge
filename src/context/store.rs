@@ -907,10 +907,10 @@ mod tests {
         if !interp.register_import_object_module(store, imp_obj).is_ok() {
             return false;
         }
-        if !interp.register_ast_module(store, ast_mod, "module") {
+        if !interp.register_ast_module(store, ast_mod, "module").is_ok() {
             return false;
         }
-        if !interp.instantiate(store, ast_mod) {
+        if !interp.instantiate(store, ast_mod).is_ok() {
             return false;
         }
         true
