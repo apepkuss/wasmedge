@@ -85,19 +85,23 @@ impl InterpreterContext {
         &self,
         store: &mut StoreContext,
         func_name: &str,
-        params: &[WasmEdgeValue],
+        params: Option<&[WasmEdgeValue]>,
         buf: &'a mut [mem::MaybeUninit<WasmEdgeValue>],
     ) -> WasmEdgeResult<&'a [WasmEdgeValue]> {
         let func_name = WasmEdgeString::from_str(func_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", func_name).as_str());
+        let (len, params) = match params {
+            Some(params) => (params.len(), params.as_ptr()),
+            None => (0, std::ptr::null()),
+        };
 
         unsafe {
             check(we_ffi::WasmEdge_InterpreterInvoke(
                 self.raw,
                 store.raw,
                 func_name.raw,
-                params.as_ptr() as *const _,
-                params.len() as u32,
+                params as *const _,
+                len as u32,
                 buf.as_mut_ptr() as *mut _,
                 buf.len() as u32,
             ))?;
@@ -111,7 +115,7 @@ impl InterpreterContext {
         store: &mut StoreContext,
         mod_name: &str,
         func_name: &str,
-        params: &[WasmEdgeValue],
+        params: Option<&[WasmEdgeValue]>,
         buf: &'a mut [mem::MaybeUninit<WasmEdgeValue>],
     ) -> WasmEdgeResult<&'a [WasmEdgeValue]> {
         let mod_name = WasmEdgeString::from_str(mod_name)
@@ -119,14 +123,19 @@ impl InterpreterContext {
         let func_name = WasmEdgeString::from_str(func_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", func_name).as_str());
 
+        let (len, params) = match params {
+            Some(params) => (params.len(), params.as_ptr()),
+            None => (0, std::ptr::null()),
+        };
+
         unsafe {
             check(we_ffi::WasmEdge_InterpreterInvokeRegistered(
                 self.raw,
                 store.raw,
                 mod_name.raw,
                 func_name.raw,
-                params.as_ptr() as *const _,
-                params.len() as u32,
+                params as *const _,
+                len as u32,
                 buf.as_mut_ptr() as *mut _,
                 buf.len() as u32,
             ))?;
@@ -253,7 +262,7 @@ mod tests {
         // invoke functions
         let params = [WasmEdgeValueGenI32(123), WasmEdgeValueGenI32(456)];
         let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<2>();
-        let result = interp.invoke(&mut store, "func-mul-2", &params, &mut buf);
+        let result = interp.invoke(&mut store, "func-mul-2", Some(&params), &mut buf);
         assert!(result.is_ok());
         let returns = result.unwrap();
         assert_eq!(246, WasmEdgeValueGetI32(returns[0]));
@@ -261,24 +270,105 @@ mod tests {
         // // Function type mismatch
         // let params = [WasmEdgeValueGenI64(123), WasmEdgeValueGenI32(456)];
         // let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<2>();
-        // let result = interp.invoke(&mut store, "func-mul-2", &params, &mut buf);
+        // let result = interp.invoke(&mut store, "func-mul-2", Some(&params), &mut buf);
         // assert!(result.is_err());
 
         // // Function not found
         // let params = [WasmEdgeValueGenI32(123), WasmEdgeValueGenI32(456)];
         // let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<2>();
-        // let result = interp.invoke(&mut store, "func-mul-3", &params, &mut buf);
+        // let result = interp.invoke(&mut store, "func-mul-3", Some(&params), &mut buf);
         // assert!(result.is_err());
 
         // Discard result
         let params = [WasmEdgeValueGenI32(123), WasmEdgeValueGenI32(456)];
         let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<0>();
-        let result = interp.invoke(&mut store, "func-mul-2", &params, &mut buf);
+        let result = interp.invoke(&mut store, "func-mul-2", Some(&params), &mut buf);
         assert!(result.is_ok());
         let params = [WasmEdgeValueGenI32(123), WasmEdgeValueGenI32(456)];
         let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<1>();
-        let result = interp.invoke(&mut store, "func-mul-2", &params, &mut buf);
+        let result = interp.invoke(&mut store, "func-mul-2", Some(&params), &mut buf);
         assert!(result.is_ok());
+
+        // ? Invoke functions call to host functions
+        // // Get table and set external reference
+        // let result = store.find_table("tab-ext");
+        // assert!(result.is_some());
+        // let mut table = result.unwrap();
+        // assert!(!table.raw.is_null());
+
+        // Invoke functions of registered module
+        let mod_name = "extern";
+        let mod_name2 = "error-name";
+        let func_name = "func-add";
+        let func_name2 = "func-add2";
+        let mut test_value = 5000;
+        let params = [
+            WasmEdgeValueGenExternRef((&mut test_value) as *mut i32 as *mut std::os::raw::c_void),
+            WasmEdgeValueGenI32(1500),
+        ];
+        let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<1>();
+        let result =
+            interp.invoke_registered(&mut store, mod_name, func_name, Some(&params), &mut buf);
+        assert!(result.is_ok());
+        let returns = result.unwrap();
+        assert_eq!(6500i32, WasmEdgeValueGetI32(returns[0]));
+
+        // ? Module not found
+        // let result = interp.invoke_registered(&mut store, mod_name2, func_name, &params, &mut buf);
+        // assert!(result.is_err());
+
+        // ? Function not found
+        // let result = interp.invoke_registered(&mut store, mod_name, func_name2, &params, &mut buf);
+        // assert!(result.is_err());
+
+        // Discard result
+        let params = [
+            WasmEdgeValueGenExternRef((&mut test_value) as *mut i32 as *mut std::os::raw::c_void),
+            WasmEdgeValueGenI32(1500),
+        ];
+        let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<0>();
+        let result =
+            interp.invoke_registered(&mut store, mod_name, func_name, Some(&params), &mut buf);
+        assert!(result.is_ok());
+
+        // Invoke host function to terminate execution
+        let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<1>();
+        let result = interp.invoke_registered(&mut store, "extern", "func-term", None, &mut buf);
+        assert!(result.is_ok());
+
+        // ? Invoke host function to fail execution
+        // let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<1>();
+        // let result = interp.invoke_registered(&mut store, "extern", "func-fail", None, &mut buf);
+        // assert!(result.is_err());
+
+        // ? Invoke host function with binding to functions
+        // let mod_name = "extern-wrap";
+        // let mut test_value = 1234;
+        // let params = [
+        //     WasmEdgeValueGenExternRef((&mut test_value) as *mut i32 as *mut std::os::raw::c_void),
+        //     WasmEdgeValueGenI32(1500),
+        // ];
+        // let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<1>();
+        // let result =
+        //     interp.invoke_registered(&mut store, mod_name, "func-sub", Some(&params), &mut buf);
+        // assert!(result.is_ok());
+        // let returns = result.unwrap();
+        // assert_eq!(-266i32, WasmEdgeValueGetI32(returns[0]));
+        // let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<1>();
+        // let result = interp.invoke_registered(&mut store, mod_name, "func-term", None, &mut buf);
+        // assert!(result.is_ok());
+        // let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<1>();
+        // let result = interp.invoke_registered(&mut store, mod_name, "func-fail", None, &mut buf);
+        // assert!(result.is_err());
+
+        // Statistics get instruction count
+        assert!(stat.get_instr_count() > 0);
+
+        // Statistics get instruction per second
+        assert!(stat.get_instr_per_second() > 0);
+
+        // Statistics get total cost
+        assert!(stat.get_total_cost() > 0);
     }
 
     fn load_module(conf: &ConfigureContext) -> Option<ASTModuleContext> {
