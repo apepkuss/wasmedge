@@ -13,6 +13,18 @@ pub fn WasmEdgeValueGenExternRef(ptr: *mut ::std::os::raw::c_void) -> WasmEdgeVa
     unsafe { we_ffi::WasmEdge_ValueGenExternRef(ptr) }
 }
 
+pub fn WasmEdgeValueGenFuncRef(idx: usize) -> WasmEdgeValue {
+    unsafe { we_ffi::WasmEdge_ValueGenFuncRef(idx as u32) }
+}
+
+pub fn WasmEdgeValueGenF32(val: f32) -> WasmEdgeValue {
+    unsafe { we_ffi::WasmEdge_ValueGenF32(val) }
+}
+
+pub fn WasmEdgeValueGenF64(val: f64) -> WasmEdgeValue {
+    unsafe { we_ffi::WasmEdge_ValueGenF64(val) }
+}
+
 pub fn WasmEdgeValueGetI32(val: WasmEdgeValue) -> i32 {
     unsafe { we_ffi::WasmEdge_ValueGetI32(val) }
 }
@@ -23,4 +35,12 @@ pub fn WasmEdgeValueGetI64(val: WasmEdgeValue) -> i64 {
 
 pub fn WasmEdgeValueGetExternRef(val: WasmEdgeValue) -> *mut ::std::os::raw::c_void {
     unsafe { we_ffi::WasmEdge_ValueGetExternRef(val) }
+}
+
+pub fn WasmEdgeValueGetF32(val: WasmEdgeValue) -> f32 {
+    unsafe { we_ffi::WasmEdge_ValueGetF32(val) }
+}
+
+pub fn WasmEdgeValueGetF64(val: WasmEdgeValue) -> f64 {
+    unsafe { we_ffi::WasmEdge_ValueGetF64(val) }
 }
