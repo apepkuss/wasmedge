@@ -162,10 +162,6 @@ impl VMContext {
 
     pub fn importobject_module(&self, reg: HostRegistration) -> Option<ImportObjectContext> {
         let raw = unsafe { we_ffi::WasmEdge_VMGetImportModuleContext(self.raw, reg) };
-        if raw.is_null() {
-            return None;
-        } else {
-        }
         match raw.is_null() {
             true => None,
             false => Some(ImportObjectContext {
