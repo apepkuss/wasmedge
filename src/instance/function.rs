@@ -1,5 +1,5 @@
 use crate::error::{WasmEdgeError, WasmEdgeResult};
-use crate::{context::store::StoreContext, types::WasmEdgeValType};
+use crate::{context::store::StoreContext, types::*};
 use std::marker::PhantomData;
 use std::{mem, ptr};
 use wasmedge_sys::ffi as we_ffi;
@@ -118,7 +118,7 @@ pub struct HostFunctionContext {
 impl HostFunctionContext {
     pub fn create(
         func_type: &FunctionTypeContext,
-        host_func: we_ffi::WasmEdge_HostFunc_t,
+        host_func: HostFunc,
         cost: u64,
     ) -> Option<HostFunctionContext> {
         let raw = unsafe { we_ffi::WasmEdge_HostFunctionCreate(func_type.raw, host_func, cost) };
@@ -130,7 +130,7 @@ impl HostFunctionContext {
 
     pub fn create_binding(
         func_type: &FunctionTypeContext,
-        wrap_func: we_ffi::WasmEdge_WrapFunc_t,
+        wrap_func: WrapFunc,
         binding: *mut std::os::raw::c_void,
         cost: u64,
     ) -> HostFunctionContext {
