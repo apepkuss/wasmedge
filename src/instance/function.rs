@@ -127,19 +127,6 @@ impl HostFunctionContext {
             false => Some(HostFunctionContext { raw }),
         }
     }
-
-    pub fn create_binding(
-        func_type: &FunctionTypeContext,
-        wrap_func: WrapFunc,
-        binding: *mut std::os::raw::c_void,
-        cost: u64,
-    ) -> HostFunctionContext {
-        HostFunctionContext {
-            raw: unsafe {
-                we_ffi::WasmEdge_HostFunctionCreateBinding(func_type.raw, wrap_func, binding, cost)
-            },
-        }
-    }
 }
 impl Drop for HostFunctionContext {
     fn drop(&mut self) {
