@@ -10,6 +10,8 @@ pub type WasmEdgeLimit = we_ffi::WasmEdge_Limit;
 pub type WasmEdgeRefType = we_ffi::WasmEdge_RefType;
 pub type WasmEdgeMutability = we_ffi::WasmEdge_Mutability;
 pub type CompilerOptimizationLevel = we_ffi::WasmEdge_CompilerOptimizationLevel;
+pub type HostFunc = we_ffi::WasmEdge_HostFunc_t;
+pub type WrapFunc = we_ffi::WasmEdge_WrapFunc_t;
 
 pub struct WasmEdgeString {
     pub(crate) raw: we_ffi::WasmEdge_String,
