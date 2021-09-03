@@ -13,20 +13,22 @@ fn test_wasmedge_tensorflow() {
     let mut conf_ctx = ConfigureContext::create();
     conf_ctx.add_host_registration(HostRegistration::WasmEdge_HostRegistration_Wasi);
     conf_ctx.add_host_registration(HostRegistration::WasmEdge_HostRegistration_WasmEdge_Process);
-    let mut vm_ctx = VMContext::create(Some(&conf_ctx), None);
+    let result = VMContext::create(Some(&conf_ctx), None);
+    assert!(result.is_some());
+    let mut vm = result.unwrap();
 
     // create tensorflow and tensorflowlite modules: mod name: "wasmedge_tensorflow", "wasmedge_tensorflowlite"
     let mut result: Result<(), WasmEdgeError>;
     let tensorflow_mod = ImportObjectContext::create_tensorflow_import_object();
-    result = vm_ctx.register_module_from_import_object(&tensorflow_mod);
+    result = vm.register_module_from_import_object(&tensorflow_mod);
     assert!(result.is_ok());
     let tensorflowlite_mod = ImportObjectContext::create_tensorflowlite_import_object();
-    result = vm_ctx.register_module_from_import_object(&tensorflowlite_mod);
+    result = vm.register_module_from_import_object(&tensorflowlite_mod);
     assert!(result.is_ok());
 
     // check the registered function: wasmedge_tensorflow_create_session
-    let result = vm_ctx
-        .function_type_registered("wasmedge_tensorflow", "wasmedge_tensorflow_create_session");
+    let result =
+        vm.function_type_registered("wasmedge_tensorflow", "wasmedge_tensorflow_create_session");
     assert!(result.is_some());
     let func_type = result.unwrap();
     let param_len = func_type.parameters_len();
@@ -34,7 +36,7 @@ fn test_wasmedge_tensorflow() {
         "param len of wasmedge_tensorflow_create_session func: {}",
         param_len
     );
-    let result = vm_ctx.function_type_registered(
+    let result = vm.function_type_registered(
         "wasmedge_tensorflowlite",
         "wasmedge_tensorflowlite_create_session",
     );
@@ -47,7 +49,7 @@ fn test_wasmedge_tensorflow() {
     );
 
     // check the registered function: wasmedge_tensorflow_get_output_tensor
-    let result = vm_ctx.function_type_registered(
+    let result = vm.function_type_registered(
         "wasmedge_tensorflow",
         "wasmedge_tensorflow_get_output_tensor",
     );
@@ -60,8 +62,7 @@ fn test_wasmedge_tensorflow() {
     );
 
     {
-        let wasi_module =
-            vm_ctx.get_import_object(HostRegistration::WasmEdge_HostRegistration_Wasi);
+        let wasi_module = vm.get_import_object(HostRegistration::WasmEdge_HostRegistration_Wasi);
         assert!(wasi_module.is_some());
     }
 
@@ -85,7 +86,7 @@ fn test_wasmedge_tensorflow() {
     // );
 
     // register wasmedge-wasi-nn module
-    let result = vm_ctx.register_module_from_file(
+    let result = vm.register_module_from_file(
             "calculator",
             "/root/workspace/wasmedge-ml/wasmedge-wasi-nn/target/wasm32-wasi/debug/wasmedge_wasi_nn.wasm",
         );
@@ -121,28 +122,30 @@ fn test_wasmedge_run_wasm() {
     let mut conf_ctx = ConfigureContext::create();
     conf_ctx.add_host_registration(HostRegistration::WasmEdge_HostRegistration_Wasi);
     conf_ctx.add_host_registration(HostRegistration::WasmEdge_HostRegistration_WasmEdge_Process);
-    let mut vm_ctx = VMContext::create(Some(&conf_ctx), None);
+    let result = VMContext::create(Some(&conf_ctx), None);
+    assert!(result.is_some());
+    let mut vm = result.unwrap();
 
     // create tensorflow and tensorflowlite modules: mod name: "wasmedge_tensorflow", "wasmedge_tensorflowlite"
     let mut result: Result<(), WasmEdgeError>;
     let tensorflow_mod = ImportObjectContext::create_tensorflow_import_object();
-    result = vm_ctx.register_module_from_import_object(&tensorflow_mod);
+    result = vm.register_module_from_import_object(&tensorflow_mod);
     assert!(result.is_ok());
     let tensorflowlite_mod = ImportObjectContext::create_tensorflowlite_import_object();
-    result = vm_ctx.register_module_from_import_object(&tensorflowlite_mod);
+    result = vm.register_module_from_import_object(&tensorflowlite_mod);
     assert!(result.is_ok());
     // check the registered function
-    let result = vm_ctx
-        .function_type_registered("wasmedge_tensorflow", "wasmedge_tensorflow_create_session");
+    let result =
+        vm.function_type_registered("wasmedge_tensorflow", "wasmedge_tensorflow_create_session");
     assert!(result.is_some());
-    let result = vm_ctx.function_type_registered(
+    let result = vm.function_type_registered(
         "wasmedge_tensorflowlite",
         "wasmedge_tensorflowlite_create_session",
     );
     assert!(result.is_some());
 
     // register wasmedge_wasi_nn.wasm module
-    let res = vm_ctx.register_module_from_file(
+    let res = vm.register_module_from_file(
         "calculator",
         "/root/workspace/wasmedge-ml/wasmedge-wasi-nn/target/wasm32-wasi/debug/wasmedge_wasi_nn.wasm",
     );
@@ -150,7 +153,7 @@ fn test_wasmedge_run_wasm() {
 
     // register using_add.wasm module
     let mod_name = "using_add";
-    let result = vm_ctx.register_module_from_file(
+    let result = vm.register_module_from_file(
         mod_name,
         "/root/workspace/examples/using_add/target/wasm32-wasi/debug/using_add.wasm",
     );
@@ -160,7 +163,7 @@ fn test_wasmedge_run_wasm() {
     let func_name = "consume_add";
     let params = vec![WasmEdgeValueGenI32(2), WasmEdgeValueGenI32(8)];
     let mut out: [mem::MaybeUninit<WasmEdgeValue>; 1] = mem::MaybeUninit::uninit_array();
-    let result = vm_ctx.execute_registered(mod_name, func_name, params.as_slice(), &mut out);
+    let result = vm.execute_registered(mod_name, func_name, params.as_slice(), &mut out);
     assert!(result.is_ok());
 
     let values = result.unwrap();
@@ -184,7 +187,7 @@ fn test_wasmedge_run_wasm() {
         let func_name = "consume_load";
         let params = vec![WasmEdgeValueGenI64(ptr as i64), WasmEdgeValueGenI32(1)];
         let mut out: [mem::MaybeUninit<WasmEdgeValue>; 1] = mem::MaybeUninit::uninit_array();
-        let result = vm_ctx.execute_registered(mod_name, func_name, params.as_slice(), &mut out);
+        let result = vm.execute_registered(mod_name, func_name, params.as_slice(), &mut out);
         assert!(result.is_ok());
 
         // let values = result.unwrap();

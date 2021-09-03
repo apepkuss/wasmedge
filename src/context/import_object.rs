@@ -296,7 +296,9 @@ mod test {
         // Initialize WASI in VM.
         let mut conf = ConfigureContext::create();
         conf.add_host_registration(HostRegistration::WasmEdge_HostRegistration_Wasi);
-        let vm = VMContext::create(Some(&conf), None);
+        let result = VMContext::create(Some(&conf), None);
+        assert!(result.is_some());
+        let vm = result.unwrap();
         assert!(!vm.raw.is_null());
         let result = vm.get_import_object(HostRegistration::WasmEdge_HostRegistration_Wasi);
         assert!(result.is_some());
@@ -310,7 +312,9 @@ mod test {
         // Initialize wasmedge_process in VM.
         let mut conf = ConfigureContext::create();
         conf.add_host_registration(HostRegistration::WasmEdge_HostRegistration_WasmEdge_Process);
-        let vm = VMContext::create(Some(&conf), None);
+        let result = VMContext::create(Some(&conf), None);
+        assert!(result.is_some());
+        let mut vm = result.unwrap();
         assert!(!vm.raw.is_null());
         let result =
             vm.get_import_object(HostRegistration::WasmEdge_HostRegistration_WasmEdge_Process);

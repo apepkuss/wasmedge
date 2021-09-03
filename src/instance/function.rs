@@ -184,7 +184,10 @@ mod tests {
         ];
 
         // Create the VM context.
-        let mut vm_ctx = VMContext::create(None, None);
+        let result = VMContext::create(None, None);
+        assert!(result.is_some());
+        let mut vm = result.unwrap();
+        assert!(!vm.raw.is_null());
 
         // create import object
         let mut imp_obj = ImportObjectContext::create("extern", ptr::null_mut()).unwrap();
@@ -204,7 +207,7 @@ mod tests {
         imp_obj.add_host_function("func-add", &mut host_func);
 
         // register import-object
-        vm_ctx.register_module_from_import_object(&imp_obj).unwrap();
+        vm.register_module_from_import_object(&imp_obj).unwrap();
 
         // The parameters and returns arrays.
         let params = vec![WasmEdgeValueGenI32(1234), WasmEdgeValueGenI32(5678)];
@@ -212,14 +215,14 @@ mod tests {
 
         // Run the WASM function from file.
         let result =
-            vm_ctx.run_wasm_from_buffer(wasm_buf.as_slice(), "addTwo", params.as_slice(), &mut out);
+            vm.run_wasm_from_buffer(wasm_buf.as_slice(), "addTwo", params.as_slice(), &mut out);
 
         assert!(result.is_ok());
         let values = result.unwrap();
         assert_eq!(values.len(), 1);
         assert_eq!(WasmEdgeValueGetI32(values[0]), 6912);
 
-        let result = vm_ctx.function_type("addTwo");
+        let result = vm.function_type("addTwo");
         assert!(result.is_some());
         let func_type = result.unwrap();
 

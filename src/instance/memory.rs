@@ -156,7 +156,10 @@ mod tests {
         }
 
         // Create the VM context.
-        let mut vm_ctx = VMContext::create(None, None);
+        let result = VMContext::create(None, None);
+        assert!(result.is_some());
+        let mut vm = result.unwrap();
+        assert!(!vm.raw.is_null());
 
         // create import object
         let mod_name = "calculator";
@@ -176,7 +179,7 @@ mod tests {
         imp_obj.add_host_function("func-add", &mut host_func);
 
         // register import-object
-        vm_ctx.register_module_from_import_object(&imp_obj).unwrap();
+        vm.register_module_from_import_object(&imp_obj).unwrap();
 
         unsafe {
             // let tf_imp_obj = we_ffi::WasmEdge_Tensorflow_ImportObjectCreate();
@@ -193,10 +196,10 @@ mod tests {
             //     println!("Import object registration failed");
             // }
 
-            let x = we_ffi::WasmEdge_VMGetFunctionListLength(vm_ctx.raw);
+            let x = we_ffi::WasmEdge_VMGetFunctionListLength(vm.raw);
             println!("x: {}", x);
 
-            let store = we_ffi::WasmEdge_VMGetStoreContext(vm_ctx.raw);
+            let store = we_ffi::WasmEdge_VMGetStoreContext(vm.raw);
             // let mod_name = WasmEdgeString::from_str(mod_name).unwrap();
             // let len = we_ffi::WasmEdge_StoreListMemoryRegisteredLength(store_ctx, mod_name.raw);
 
