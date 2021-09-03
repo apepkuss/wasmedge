@@ -5,8 +5,8 @@ use crate::{
         memory::MemoryInstanceContext, table::TableInstanceContext,
     },
     types::WasmEdgeString,
+    utils::string_to_c_array,
 };
-use std::ffi::CString;
 use std::marker::PhantomData;
 use std::ptr;
 use wasmedge_sys::ffi as we_ffi;
@@ -37,80 +37,46 @@ impl<'a> ImportObjectContext<'a> {
         envs: Option<&[&str]>,
         dirs: Option<&[&str]>,
         preopens: Option<&[&str]>,
-    ) -> Option<*mut we_ffi::WasmEdge_ImportObjectContext> {
-        // Option<ImportObjectContext<'static>> {
+    ) -> Option<ImportObjectContext<'a>> {
+        // Option<*mut we_ffi::WasmEdge_ImportObjectContext> {
+
         let (args_len, args) = match args {
+            Some(args) => (args.len() as u32, string_to_c_array(args)),
             None => (0, ptr::null()),
-            Some(args) => {
-                let args = args
-                    .iter()
-                    .map(|&arg| {
-                        let arg = CString::new(arg).unwrap();
-                        arg.as_ptr()
-                    })
-                    .collect::<Vec<_>>();
-                (args.len(), args.as_ptr())
-            }
         };
         let (envs_len, envs) = match envs {
+            Some(envs) => (envs.len() as u32, string_to_c_array(envs)),
             None => (0, ptr::null()),
-            Some(envs) => {
-                let envs = envs
-                    .iter()
-                    .map(|&env| {
-                        let env = CString::new(env).unwrap();
-                        env.as_ptr()
-                    })
-                    .collect::<Vec<_>>();
-                (envs.len(), envs.as_ptr())
-            }
         };
         let (dirs_len, dirs) = match dirs {
+            Some(dirs) => (dirs.len() as u32, string_to_c_array(dirs)),
             None => (0, ptr::null()),
-            Some(dirs) => {
-                let dirs = dirs
-                    .iter()
-                    .map(|&dir| {
-                        let dir = CString::new(dir).unwrap();
-                        dir.as_ptr()
-                    })
-                    .collect::<Vec<_>>();
-                (dirs.len(), dirs.as_ptr())
-            }
         };
         let (preopens_len, preopens) = match preopens {
+            Some(preopens) => (preopens.len() as u32, string_to_c_array(preopens)),
             None => (0, ptr::null()),
-            Some(preopens) => {
-                let preopens = preopens
-                    .iter()
-                    .map(|&p| {
-                        let p = CString::new(p).unwrap();
-                        p.as_ptr()
-                    })
-                    .collect::<Vec<_>>();
-                (preopens.len(), preopens.as_ptr())
-            }
         };
         let raw = unsafe {
             we_ffi::WasmEdge_ImportObjectCreateWASI(
                 args,
-                args_len as u32,
+                args_len,
                 envs,
-                envs_len as u32,
+                envs_len,
                 dirs,
-                dirs_len as u32,
+                dirs_len,
                 preopens,
-                preopens_len as u32,
+                preopens_len,
             )
         };
+
         match raw.is_null() {
             true => None,
-            false => Some(raw),
-            // Some(ImportObjectContext {
-            //     raw,
-            //     _marker: PhantomData,
-            //     _clean: true,
-            // }),
+            // false => Some(raw),
+            false => Some(ImportObjectContext {
+                raw,
+                _marker: PhantomData,
+                _drop: true,
+            }),
         }
     }
 
@@ -290,32 +256,30 @@ mod test {
     }
 
     #[test]
-    fn test_context_import_object_init_in_vm() {
-        // let args = ["arg1\0", "arg2\0"];
-        // let envs = ["ENV1=VAL1\0", "ENV2=VAL2\0", "ENV3=VAL3\0"];
-        // let dirs = [".:.\0"];
-        // let preopens = [
-        //     "apiTestData\0",
-        //     "Makefile\0",
-        //     "CMakeFiles\0",
-        //     "ssvmAPICoreTests\0",
-        // ];
-
+    fn test_context_import_object_create_wasi() {
         let args = ["arg1", "arg2"];
         let envs = ["ENV1=VAL1", "ENV2=VAL2", "ENV3=VAL3"];
         let dirs = [".:."];
         let preopens = ["apiTestData", "Makefile", "CMakeFiles", "ssvmAPICoreTests"];
 
-        // ? Create WASI
-        // let result = ImportObjectContext::create_wasi(
-        //     Some(&args),
-        //     Some(&envs),
-        //     Some(&dirs),
-        //     Some(&preopens),
-        // );
-        // assert!(result.is_some());
-        // let imp_obj = result.unwrap();
-        // assert!(!imp_obj.raw.is_null());
+        // Create WASI
+        let result = ImportObjectContext::create_wasi(
+            Some(&args),
+            Some(&envs),
+            Some(&dirs),
+            Some(&preopens),
+        );
+        assert!(result.is_some());
+        let imp_obj = result.unwrap();
+        assert!(!imp_obj.raw.is_null());
+    }
+
+    #[test]
+    fn test_context_import_object_init_wasi_in_vm() {
+        let args = ["arg1", "arg2"];
+        let envs = ["ENV1=VAL1", "ENV2=VAL2", "ENV3=VAL3"];
+        let dirs = [".:."];
+        let preopens = ["apiTestData", "Makefile", "CMakeFiles", "ssvmAPICoreTests"];
 
         // Initialize WASI in VM.
         let mut conf = ConfigureContext::create();
@@ -327,7 +291,10 @@ mod test {
         let imp_obj = result.unwrap();
         assert!(!imp_obj.raw.is_null());
         imp_obj.init_wasi(&args, &envs, &dirs, &preopens);
+    }
 
+    #[test]
+    fn test_context_import_object_init_process_in_vm() {
         // Initialize wasmedge_process in VM.
         let mut conf = ConfigureContext::create();
         conf.add_host_registration(HostRegistration::WasmEdge_HostRegistration_WasmEdge_Process);
