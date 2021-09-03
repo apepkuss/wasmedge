@@ -15,6 +15,7 @@ use wasmedge_sys::ffi as we_ffi;
 pub struct ImportObjectContext<'vm> {
     pub(crate) raw: *mut we_ffi::WasmEdge_ImportObjectContext,
     pub(crate) _marker: PhantomData<&'vm VMContext>,
+    pub(crate) _drop: bool,
 }
 impl<'a> ImportObjectContext<'a> {
     pub fn create(mod_name: &str, data: *mut std::os::raw::c_void) -> Option<ImportObjectContext> {
@@ -26,6 +27,7 @@ impl<'a> ImportObjectContext<'a> {
             false => Some(ImportObjectContext {
                 raw,
                 _marker: PhantomData,
+                _drop: true,
             }),
         }
     }
@@ -35,7 +37,8 @@ impl<'a> ImportObjectContext<'a> {
         envs: Option<&[&str]>,
         dirs: Option<&[&str]>,
         preopens: Option<&[&str]>,
-    ) -> Option<ImportObjectContext<'static>> {
+    ) -> Option<*mut we_ffi::WasmEdge_ImportObjectContext> {
+        // Option<ImportObjectContext<'static>> {
         let (args_len, args) = match args {
             None => (0, ptr::null()),
             Some(args) => {
@@ -102,10 +105,12 @@ impl<'a> ImportObjectContext<'a> {
         };
         match raw.is_null() {
             true => None,
-            false => Some(ImportObjectContext {
-                raw,
-                _marker: PhantomData,
-            }),
+            false => Some(raw),
+            // Some(ImportObjectContext {
+            //     raw,
+            //     _marker: PhantomData,
+            //     _clean: true,
+            // }),
         }
     }
 
@@ -113,6 +118,7 @@ impl<'a> ImportObjectContext<'a> {
         ImportObjectContext {
             raw: unsafe { we_ffi::WasmEdge_Tensorflow_ImportObjectCreate() },
             _marker: PhantomData,
+            _drop: true,
         }
     }
 
@@ -120,6 +126,7 @@ impl<'a> ImportObjectContext<'a> {
         ImportObjectContext {
             raw: unsafe { we_ffi::WasmEdge_TensorflowLite_ImportObjectCreate() },
             _marker: PhantomData,
+            _drop: true,
         }
     }
 
@@ -194,7 +201,11 @@ impl<'a> ImportObjectContext<'a> {
 impl<'a> Drop for ImportObjectContext<'a> {
     fn drop(&mut self) {
         if !self.raw.is_null() {
-            unsafe { we_ffi::WasmEdge_ImportObjectDelete(self.raw) }
+            if self._drop {
+                unsafe { we_ffi::WasmEdge_ImportObjectDelete(self.raw) }
+            } else {
+                self.raw = ptr::null_mut();
+            }
         }
     }
 }
@@ -311,23 +322,22 @@ mod test {
         conf.add_host_registration(HostRegistration::WasmEdge_HostRegistration_Wasi);
         let vm = VMContext::create(Some(&conf), None);
         assert!(!vm.raw.is_null());
-        // let result = vm.importobject_module(HostRegistration::WasmEdge_HostRegistration_Wasi);
-        // assert!(result.is_none());
-        // assert!(result.is_some());
-        // let imp_obj = result.unwrap();
-        // assert!(!imp_obj.raw.is_null());
-        // imp_obj.init_wasi(&args, &envs, &dirs, &preopens);
+        let result = vm.get_import_object(HostRegistration::WasmEdge_HostRegistration_Wasi);
+        assert!(result.is_some());
+        let imp_obj = result.unwrap();
+        assert!(!imp_obj.raw.is_null());
+        imp_obj.init_wasi(&args, &envs, &dirs, &preopens);
 
         // Initialize wasmedge_process in VM.
         let mut conf = ConfigureContext::create();
         conf.add_host_registration(HostRegistration::WasmEdge_HostRegistration_WasmEdge_Process);
         let vm = VMContext::create(Some(&conf), None);
         assert!(!vm.raw.is_null());
-        // let result =
-        //     vm.importobject_module(HostRegistration::WasmEdge_HostRegistration_WasmEdge_Process);
-        // assert!(result.is_some());
-        // let imp_obj = result.unwrap();
-        // assert!(!imp_obj.raw.is_null());
+        let result =
+            vm.get_import_object(HostRegistration::WasmEdge_HostRegistration_WasmEdge_Process);
+        assert!(result.is_some());
+        let imp_obj = result.unwrap();
+        assert!(!imp_obj.raw.is_null());
     }
 
     #[no_mangle]
