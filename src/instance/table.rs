@@ -6,11 +6,12 @@ use std::marker::PhantomData;
 use std::mem;
 use wasmedge_sys::ffi as we_ffi;
 
-pub struct TableInstanceContext<'a> {
+pub struct TableInstanceContext<'store, 'vm: 'store> {
     pub(crate) raw: *mut we_ffi::WasmEdge_TableInstanceContext,
-    pub(crate) _marker: PhantomData<&'a StoreContext<'a>>,
+    pub(crate) _marker: PhantomData<&'store StoreContext<'vm>>,
+    pub(crate) _drop: bool,
 }
-impl<'a> TableInstanceContext<'a> {
+impl<'store, 'vm: 'store> TableInstanceContext<'store, 'vm> {
     pub fn create(ref_type: WasmEdgeRefType, limit: WasmEdgeLimit) -> Option<Self> {
         let raw = unsafe { we_ffi::WasmEdge_TableInstanceCreate(ref_type, limit) };
         match raw.is_null() {
@@ -18,6 +19,7 @@ impl<'a> TableInstanceContext<'a> {
             false => Some(TableInstanceContext {
                 raw,
                 _marker: PhantomData,
+                _drop: true,
             }),
         }
     }
@@ -54,9 +56,15 @@ impl<'a> TableInstanceContext<'a> {
         unsafe { check(we_ffi::WasmEdge_TableInstanceGrow(self.raw, size as u32)) }
     }
 }
-impl<'a> Drop for TableInstanceContext<'a> {
+impl<'store, 'vm: 'store> Drop for TableInstanceContext<'store, 'vm> {
     fn drop(&mut self) {
-        unsafe { we_ffi::WasmEdge_TableInstanceDelete(self.raw) }
+        if !self.raw.is_null() {
+            if self._drop {
+                unsafe { we_ffi::WasmEdge_TableInstanceDelete(self.raw) }
+            } else {
+                self.raw = std::ptr::null_mut();
+            }
+        }
     }
 }
 

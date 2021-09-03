@@ -1,6 +1,5 @@
 use crate::error::{WasmEdgeError, WasmEdgeResult};
-use crate::{context::store::StoreContext, types::*};
-use std::marker::PhantomData;
+use crate::types::*;
 use std::{mem, ptr};
 use wasmedge_sys::ffi as we_ffi;
 
@@ -134,9 +133,8 @@ impl Drop for HostFunctionContext {
     }
 }
 
-pub struct FunctionInstanceContext<'a> {
+pub struct FunctionInstanceContext {
     pub(crate) raw: *mut we_ffi::WasmEdge_FunctionInstanceContext,
-    pub(crate) _marker: PhantomData<&'a StoreContext<'a>>,
 }
 
 #[cfg(test)]

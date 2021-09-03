@@ -14,11 +14,11 @@ use std::marker::PhantomData;
 use std::mem;
 use wasmedge_sys::ffi as we_ffi;
 
-pub struct StoreContext<'a> {
+pub struct StoreContext<'vm> {
     pub(crate) raw: *mut we_ffi::WasmEdge_StoreContext,
-    pub(crate) _marker: PhantomData<&'a VMContext>,
+    pub(crate) _marker: PhantomData<&'vm VMContext>,
 }
-impl<'a> StoreContext<'a> {
+impl<'vm> StoreContext<'vm> {
     pub fn create() -> Self {
         StoreContext {
             raw: unsafe { we_ffi::WasmEdge_StoreCreate() },
@@ -26,24 +26,21 @@ impl<'a> StoreContext<'a> {
         }
     }
 
-    pub fn find_function(&'a self, func_name: &str) -> Option<FunctionInstanceContext<'a>> {
+    pub fn find_function(&self, func_name: &str) -> Option<FunctionInstanceContext> {
         let func_name = WasmEdgeString::from_str(func_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", func_name).as_str());
         let raw = unsafe { we_ffi::WasmEdge_StoreFindFunction(self.raw, func_name.raw) };
         match raw.is_null() {
             true => None,
-            false => Some(FunctionInstanceContext {
-                raw,
-                _marker: PhantomData,
-            }),
+            false => Some(FunctionInstanceContext { raw }),
         }
     }
 
     pub fn find_function_registered(
-        &'a self,
+        &self,
         mod_name: &str,
         func_name: &str,
-    ) -> Option<FunctionInstanceContext<'a>> {
+    ) -> Option<FunctionInstanceContext> {
         let mod_name = WasmEdgeString::from_str(mod_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
         let func_name = WasmEdgeString::from_str(func_name)
@@ -53,14 +50,11 @@ impl<'a> StoreContext<'a> {
         };
         match raw.is_null() {
             true => None,
-            false => Some(FunctionInstanceContext {
-                raw,
-                _marker: PhantomData,
-            }),
+            false => Some(FunctionInstanceContext { raw }),
         }
     }
 
-    pub fn find_table(&'a self, table_name: &str) -> Option<TableInstanceContext<'a>> {
+    pub fn find_table(&self, table_name: &str) -> Option<TableInstanceContext> {
         let table_name = WasmEdgeString::from_str(table_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", table_name).as_str());
         let raw = unsafe { we_ffi::WasmEdge_StoreFindTable(self.raw, table_name.raw) };
@@ -69,15 +63,16 @@ impl<'a> StoreContext<'a> {
             false => Some(TableInstanceContext {
                 raw,
                 _marker: PhantomData,
+                _drop: false,
             }),
         }
     }
 
     pub fn find_table_registered(
-        &'a self,
+        &self,
         mod_name: &str,
         table_name: &str,
-    ) -> Option<TableInstanceContext<'a>> {
+    ) -> Option<TableInstanceContext> {
         let mod_name = WasmEdgeString::from_str(mod_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
         let table_name = WasmEdgeString::from_str(table_name)
@@ -90,11 +85,12 @@ impl<'a> StoreContext<'a> {
             false => Some(TableInstanceContext {
                 raw,
                 _marker: PhantomData,
+                _drop: false,
             }),
         }
     }
 
-    pub fn find_memory(&'a self, mem_name: &str) -> Option<MemoryInstanceContext<'a>> {
+    pub fn find_memory(&self, mem_name: &str) -> Option<MemoryInstanceContext> {
         let mem_name = WasmEdgeString::from_str(mem_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", mem_name).as_str());
         let raw = unsafe { we_ffi::WasmEdge_StoreFindMemory(self.raw, mem_name.raw) };
@@ -103,15 +99,16 @@ impl<'a> StoreContext<'a> {
             false => Some(MemoryInstanceContext {
                 raw,
                 _marker: PhantomData,
+                _drop: false,
             }),
         }
     }
 
     pub fn find_memory_registered(
-        &'a self,
+        &'vm self,
         mod_name: &str,
         mem_name: &str,
-    ) -> Option<MemoryInstanceContext<'a>> {
+    ) -> Option<MemoryInstanceContext> {
         let mod_name = WasmEdgeString::from_str(mod_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
         let mem_name = WasmEdgeString::from_str(mem_name)
@@ -124,11 +121,12 @@ impl<'a> StoreContext<'a> {
             false => Some(MemoryInstanceContext {
                 raw,
                 _marker: PhantomData,
+                _drop: false,
             }),
         }
     }
 
-    pub fn find_global(&'a self, global_name: &str) -> Option<GlobalInstanceContext<'a>> {
+    pub fn find_global(&self, global_name: &str) -> Option<GlobalInstanceContext> {
         let global_name = WasmEdgeString::from_str(global_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", global_name).as_str());
         let raw = unsafe { we_ffi::WasmEdge_StoreFindGlobal(self.raw, global_name.raw) };
@@ -137,15 +135,16 @@ impl<'a> StoreContext<'a> {
             false => Some(GlobalInstanceContext {
                 raw,
                 _marker: PhantomData,
+                _drop: false,
             }),
         }
     }
 
     pub fn find_global_registered(
-        &'a self,
+        &self,
         mod_name: &str,
         global_name: &str,
-    ) -> Option<GlobalInstanceContext<'a>> {
+    ) -> Option<GlobalInstanceContext> {
         let mod_name = WasmEdgeString::from_str(mod_name)
             .expect(format!("Failed to create WasmEdgeString from '{}'", mod_name).as_str());
         let global_name = WasmEdgeString::from_str(global_name)
@@ -158,6 +157,7 @@ impl<'a> StoreContext<'a> {
             false => Some(GlobalInstanceContext {
                 raw,
                 _marker: PhantomData,
+                _drop: false,
             }),
         }
     }
@@ -168,7 +168,7 @@ impl<'a> StoreContext<'a> {
 
     pub fn list_function(
         &self,
-        func_names: &'a mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
+        func_names: &mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
     ) -> WasmEdgeResult<(usize, Vec<String>)> {
         let max_len = self.list_function_len();
         match 0 < func_names.len() && func_names.len() <= max_len {
@@ -209,7 +209,7 @@ impl<'a> StoreContext<'a> {
     pub fn list_function_registered(
         &self,
         mod_name: &str,
-        func_names: &'a mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
+        func_names: &mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
     ) -> WasmEdgeResult<(usize, Vec<String>)> {
         let max_len = self.list_function_registered_len(mod_name);
         match 0 < func_names.len() && func_names.len() <= max_len {
@@ -634,6 +634,7 @@ mod tests {
         println!("table_names: {:?}", table_names);
 
         // Store find table
+        assert!(store.find_table(&table_names[1]).is_some());
         assert!(store.find_table(err_name).is_none());
 
         // Store list table exports registered
@@ -647,10 +648,12 @@ mod tests {
         assert_eq!(len, 2);
 
         // Store find table registered
-        println!("table_reg_names: {:?}", table_names);
-        // assert!(store
-        //     .find_table_registered(mod_name[0], &table_names[0])
-        //     .is_some());
+        assert!(store
+            .find_table_registered(mod_name[0], &table_names[0])
+            .is_some());
+        assert!(store
+            .find_table_registered(mod_name[0], &table_names[1][..8])
+            .is_some());
         assert!(store.find_table_registered(mod_name[0], err_name).is_none());
 
         // Store list memory exports
@@ -663,7 +666,7 @@ mod tests {
         println!("memory_names: {:?}", memory_names);
 
         // Store find memory
-        // assert!(store.find_memory(&memory_names[0]).is_some()); // error: caused by invalid utf-8 characters
+        // assert!(store.find_memory(&memory_names[0]).is_some()); // ! error: caused by invalid utf-8 characters
         assert!(store.find_memory(&err_name).is_none());
 
         // Store list memory exports registered
@@ -679,7 +682,7 @@ mod tests {
 
         // Store find memory registered
         // assert!(store
-        //     .find_memory_registered(&mod_name[0], &memory_names[0])
+        //     .find_memory_registered(&mod_name[0], &memory_names[0]) // ! error: caused by invalid utf-8 characters
         //     .is_some());
         assert!(store
             .find_memory_registered(&mod_name[0], &err_name)
@@ -701,7 +704,7 @@ mod tests {
         println!("global_names: {:?}", global_names);
 
         // Store find global
-        // assert!(store.find_global(&global_names[1]).is_some());
+        assert!(store.find_global(&global_names[0]).is_some());
         assert!(store.find_global(err_name).is_none());
 
         // Store list global exports registered
@@ -743,8 +746,6 @@ mod tests {
                 store.list_module_len()
             )
         );
-
-        // unsafe { we_ffi::WasmEdge_ImportObjectDelete(imp_obj) };
     }
 
     fn create_extern_module(name: &str, is_wrap: bool) -> Option<ImportObjectContext<'_>> {

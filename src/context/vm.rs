@@ -160,13 +160,14 @@ impl VMContext {
         unsafe { we_ffi::WasmEdge_VMGetFunctionListLength(self.raw) as usize }
     }
 
-    pub fn importobject_module(&self, reg: HostRegistration) -> Option<ImportObjectContext> {
+    pub fn get_import_object(&self, reg: HostRegistration) -> Option<ImportObjectContext> {
         let raw = unsafe { we_ffi::WasmEdge_VMGetImportModuleContext(self.raw, reg) };
         match raw.is_null() {
             true => None,
             false => Some(ImportObjectContext {
                 raw,
                 _marker: PhantomData,
+                _drop: false,
             }),
         }
     }

@@ -3,11 +3,12 @@ use crate::types::*;
 use std::marker::PhantomData;
 use wasmedge_sys::ffi as we_ffi;
 
-pub struct GlobalInstanceContext<'a> {
+pub struct GlobalInstanceContext<'store, 'vm: 'store> {
     pub(crate) raw: *mut we_ffi::WasmEdge_GlobalInstanceContext,
-    pub(crate) _marker: PhantomData<&'a StoreContext<'a>>,
+    pub(crate) _marker: PhantomData<&'store StoreContext<'vm>>,
+    pub(crate) _drop: bool,
 }
-impl<'a> GlobalInstanceContext<'a> {
+impl<'store, 'vm: 'store> GlobalInstanceContext<'store, 'vm> {
     pub fn create(value: WasmEdgeValue, mutable: WasmEdgeMutability) -> Option<Self> {
         let raw = unsafe { we_ffi::WasmEdge_GlobalInstanceCreate(value, mutable) };
         match raw.is_null() {
@@ -15,6 +16,7 @@ impl<'a> GlobalInstanceContext<'a> {
             false => Some(GlobalInstanceContext {
                 raw,
                 _marker: PhantomData,
+                _drop: true,
             }),
         }
     }
@@ -35,9 +37,15 @@ impl<'a> GlobalInstanceContext<'a> {
         unsafe { we_ffi::WasmEdge_GlobalInstanceSetValue(self.raw, value) }
     }
 }
-impl<'a> Drop for GlobalInstanceContext<'a> {
+impl<'store, 'vm: 'store> Drop for GlobalInstanceContext<'store, 'vm> {
     fn drop(&mut self) {
-        unsafe { we_ffi::WasmEdge_GlobalInstanceDelete(self.raw) }
+        if !self.raw.is_null() {
+            if self._drop {
+                unsafe { we_ffi::WasmEdge_GlobalInstanceDelete(self.raw) }
+            } else {
+                self.raw = std::ptr::null_mut();
+            }
+        }
     }
 }
 
