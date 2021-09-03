@@ -38,8 +38,6 @@ impl<'a> ImportObjectContext<'a> {
         dirs: Option<&[&str]>,
         preopens: Option<&[&str]>,
     ) -> Option<ImportObjectContext<'a>> {
-        // Option<*mut we_ffi::WasmEdge_ImportObjectContext> {
-
         let (args_len, args) = match args {
             Some(args) => (args.len() as u32, string_to_c_array(args)),
             None => (0, ptr::null()),
@@ -96,34 +94,40 @@ impl<'a> ImportObjectContext<'a> {
         }
     }
 
-    pub fn init_wasi(&self, args: &[&str], envs: &[&str], dirs: &[&str], preopens: &[&str]) {
-        let mut cargs = vec![];
-        for &arg in args.iter() {
-            cargs.push(arg.as_ptr() as *const _);
-        }
-        let mut cenvs = vec![];
-        for &env in envs.iter() {
-            cenvs.push(env.as_ptr() as *const _);
-        }
-        let mut cdirs = vec![];
-        for &dir in dirs.iter() {
-            cdirs.push(dir.as_ptr() as *const _);
-        }
-        let mut cpreopens = vec![];
-        for &pre in preopens.iter() {
-            cpreopens.push(pre.as_ptr() as *const _);
-        }
+    pub fn init_wasi(
+        &self,
+        args: Option<&[&str]>,
+        envs: Option<&[&str]>,
+        dirs: Option<&[&str]>,
+        preopens: Option<&[&str]>,
+    ) {
+        let (args_len, args) = match args {
+            Some(args) => (args.len() as u32, string_to_c_array(args)),
+            None => (0, ptr::null()),
+        };
+        let (envs_len, envs) = match envs {
+            Some(envs) => (envs.len() as u32, string_to_c_array(envs)),
+            None => (0, ptr::null()),
+        };
+        let (dirs_len, dirs) = match dirs {
+            Some(dirs) => (dirs.len() as u32, string_to_c_array(dirs)),
+            None => (0, ptr::null()),
+        };
+        let (preopens_len, preopens) = match preopens {
+            Some(preopens) => (preopens.len() as u32, string_to_c_array(preopens)),
+            None => (0, ptr::null()),
+        };
         unsafe {
             we_ffi::WasmEdge_ImportObjectInitWASI(
                 self.raw,
-                cargs.as_ptr() as *const _,
-                cargs.len() as u32,
-                cenvs.as_ptr() as *const _,
-                cenvs.len() as u32,
-                cdirs.as_ptr() as *const _,
-                cdirs.len() as u32,
-                cpreopens.as_ptr() as *const _,
-                cpreopens.len() as u32,
+                args,
+                args_len,
+                envs,
+                envs_len,
+                dirs,
+                dirs_len,
+                preopens,
+                preopens_len,
             )
         };
     }
@@ -188,7 +192,7 @@ mod test {
     use std::ptr;
 
     #[test]
-    fn test_context_import_object() {
+    fn test_context_import_object_basic() {
         let host_name = "extern";
 
         // Create import object with name ""
@@ -232,6 +236,7 @@ mod test {
         let mut host_table = result.unwrap();
         assert!(!host_table.raw.is_null());
         imp_obj.add_table("table", &mut host_table);
+        assert!(host_table.raw.is_null());
 
         // Add host memory "memory"
         let mem_limit = WasmEdgeLimit {
@@ -244,6 +249,7 @@ mod test {
         let mut host_memory = result.unwrap();
         assert!(!host_memory.raw.is_null());
         imp_obj.add_memory("memory", &mut host_memory);
+        assert!(host_memory.raw.is_null());
 
         // Add host global "global_i32": const 666
         let result = GlobalInstanceContext::create(
@@ -253,6 +259,7 @@ mod test {
         assert!(result.is_some());
         let mut host_global = result.unwrap();
         imp_obj.add_global("global_i32", &mut host_global);
+        assert!(host_global.raw.is_null());
     }
 
     #[test]
@@ -269,6 +276,11 @@ mod test {
             Some(&dirs),
             Some(&preopens),
         );
+        assert!(result.is_some());
+        let imp_obj = result.unwrap();
+        assert!(!imp_obj.raw.is_null());
+
+        let result = ImportObjectContext::create_wasi(None, None, None, None);
         assert!(result.is_some());
         let imp_obj = result.unwrap();
         assert!(!imp_obj.raw.is_null());
@@ -290,7 +302,7 @@ mod test {
         assert!(result.is_some());
         let imp_obj = result.unwrap();
         assert!(!imp_obj.raw.is_null());
-        imp_obj.init_wasi(&args, &envs, &dirs, &preopens);
+        imp_obj.init_wasi(Some(&args), Some(&envs), Some(&dirs), Some(&preopens));
     }
 
     #[test]
