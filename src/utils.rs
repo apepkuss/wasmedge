@@ -33,3 +33,14 @@ pub fn check(result: we_ffi::WasmEdge_Result) -> WasmEdgeResult<()> {
     }
     Ok(())
 }
+
+pub fn string_to_c_array(args: &[&str]) -> *const *const std::os::raw::c_char {
+    let mut v = vec![];
+    for &arg in args {
+        let s = CString::new(arg).unwrap();
+        v.push(s.as_ptr());
+    }
+    let p = v.as_ptr();
+    std::mem::forget(v);
+    p
+}
