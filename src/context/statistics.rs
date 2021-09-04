@@ -1,14 +1,22 @@
+use crate::context::vm::VMContext;
+use std::marker::PhantomData;
 use wasmedge_sys::ffi as we_ffi;
 
-pub struct StatisticsContext {
+pub struct StatisticsContext<'vm> {
     pub(crate) raw: *mut we_ffi::WasmEdge_StatisticsContext,
+    pub(crate) _marker: PhantomData<&'vm VMContext>,
+    pub(crate) _drop: bool,
 }
-impl StatisticsContext {
+impl<'vm> StatisticsContext<'vm> {
     pub fn create() -> Option<Self> {
         let raw = unsafe { we_ffi::WasmEdge_StatisticsCreate() };
         match raw.is_null() {
             true => None,
-            false => Some(StatisticsContext { raw }),
+            false => Some(StatisticsContext {
+                raw,
+                _marker: PhantomData,
+                _drop: true,
+            }),
         }
     }
 
@@ -38,10 +46,14 @@ impl StatisticsContext {
         unsafe { we_ffi::WasmEdge_StatisticsGetTotalCost(self.raw) as usize }
     }
 }
-impl Drop for StatisticsContext {
+impl<'vm> Drop for StatisticsContext<'vm> {
     fn drop(&mut self) {
         if !self.raw.is_null() {
-            unsafe { we_ffi::WasmEdge_StatisticsDelete(self.raw) }
+            if self._drop {
+                unsafe { we_ffi::WasmEdge_StatisticsDelete(self.raw) }
+            } else {
+                self.raw = std::ptr::null_mut();
+            }
         }
     }
 }

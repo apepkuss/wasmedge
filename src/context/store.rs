@@ -17,12 +17,14 @@ use wasmedge_sys::ffi as we_ffi;
 pub struct StoreContext<'vm> {
     pub(crate) raw: *mut we_ffi::WasmEdge_StoreContext,
     pub(crate) _marker: PhantomData<&'vm VMContext>,
+    pub(crate) _drop: bool,
 }
 impl<'vm> StoreContext<'vm> {
     pub fn create() -> Self {
         StoreContext {
             raw: unsafe { we_ffi::WasmEdge_StoreCreate() },
             _marker: PhantomData,
+            _drop: true,
         }
     }
 
@@ -531,7 +533,11 @@ impl<'vm> StoreContext<'vm> {
 impl<'vm> Drop for StoreContext<'vm> {
     fn drop(&mut self) {
         if !self.raw.is_null() {
-            unsafe { we_ffi::WasmEdge_StoreDelete(self.raw) }
+            if self._drop {
+                unsafe { we_ffi::WasmEdge_StoreDelete(self.raw) }
+            } else {
+                self.raw = std::ptr::null_mut();
+            }
         }
     }
 }
