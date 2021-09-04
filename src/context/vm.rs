@@ -3,7 +3,7 @@ use crate::{
         ast::ASTModuleContext, configure::ConfigureContext, import_object::ImportObjectContext,
         statistics::StatisticsContext, store::StoreContext,
     },
-    error::{WasmEdgeError, WasmEdgeResult},
+    error::WasmEdgeResult,
     instance::function::FunctionTypeContext,
     types::*,
     utils::{check, path_to_cstring},
@@ -297,51 +297,35 @@ impl VMContext {
         unsafe { we_ffi::WasmEdge_VMGetFunctionListLength(self.raw) as usize }
     }
 
-    // pub fn function_list(
-    //     &self,
-    //     func_names: &mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
-    //     func_types: &mut [mem::MaybeUninit<we_ffi::WasmEdge_FunctionTypeContext>],
-    // ) -> WasmEdgeResult<(usize, Vec<String>, Vec<FunctionTypeContext>)> {
-    //     let max_len = self.function_list_len();
-    //     match 0 < func_names.len() && func_names.len() <= max_len && 0< func_types.len() && func_types.len() <= max_len {
-    //         true => {
-    //             let len = unsafe {
-    //                 we_ffi::WasmEdge_VMGetFunctionList(
-    //                     self.raw,
-    //                     func_names.as_mut_ptr() as *mut we_ffi::WasmEdge_String,
-    //                     func_types.as_mut_ptr() as *mut _,
-    //                     func_names.len() as u32,
-    //                 )
-    //             };
-    //             let s_vec = unsafe {
-    //                 mem::MaybeUninit::slice_assume_init_ref(&func_names[..func_names.len()])
-    //             };
-    //             let mut names = vec![];
-    //             for s in s_vec {
-    //                 let slice = unsafe { CStr::from_ptr(s.Buf as *const _) };
-    //                 names.push(slice.to_string_lossy().into_owned());
-    //             }
-    //             let t_vec = unsafe {
-    //                 mem::MaybeUninit::slice_assume_init_ref(&func_types[..func_types.len()])
-    //             };
-    //             let mut types = vec![];
-    //             for mut t in t_vec {
-    //                 let func_type = FunctionTypeContext {
-    //                     raw: t.as,
-    //                 };
-    //                 types.push(func_type)
-    //             }
+    pub fn function_names(
+        &self,
+        buf: &mut [mem::MaybeUninit<we_ffi::WasmEdge_String>],
+    ) -> Option<Vec<String>> {
+        let max_len = self.function_list_len();
+        match 0 < buf.len() && buf.len() <= max_len {
+            true => unsafe {
+                we_ffi::WasmEdge_VMGetFunctionList(
+                    self.raw,
+                    buf.as_mut_ptr() as *mut _,
+                    std::ptr::null_mut(),
+                    buf.len() as u32,
+                );
 
-    //             Ok((len as usize, names))
-    //         }
-    //         false => Err(WasmEdgeError::from(format!(
-    //             "The arguments, 'func_names' and 'func_types', should have the same length, which should be between 1 and the max length ({}).",
-    //             max_len
-    //         ))),
-    //     }
-    // }
+                let names = mem::MaybeUninit::slice_assume_init_ref(&buf[..buf.len()]);
+                let mut s_vec = vec![];
+                for s in names {
+                    let slice = CStr::from_ptr(s.Buf as *const _);
+                    s_vec.push(slice.to_string_lossy().into_owned());
+                }
+                Some(s_vec)
+            },
+            false => None,
+        }
+    }
 
-    pub fn get_import_object(&self, reg: HostRegistration) -> Option<ImportObjectContext> {
+    // pub fn function_types()
+
+    pub fn import_object(&self, reg: HostRegistration) -> Option<ImportObjectContext> {
         let raw = unsafe { we_ffi::WasmEdge_VMGetImportModuleContext(self.raw, reg) };
         match raw.is_null() {
             true => None,
@@ -843,6 +827,26 @@ mod tests {
 
         // VM get function list
         assert_eq!(vm.function_list_len(), 11);
+        let mut buf = mem::MaybeUninit::<we_ffi::WasmEdge_String>::uninit_array::<11>();
+        let result = vm.function_names(&mut buf);
+        assert!(result.is_some());
+        let names = result.unwrap();
+        assert_eq!(
+            &names[..],
+            [
+                "func-1",
+                "func-2",
+                "func-3",
+                "func-4",
+                "func-add",
+                "func-call-indirect",
+                "func-host-add",
+                "func-host-div",
+                "func-host-mul",
+                "func-host-sub",
+                "func-mul-2"
+            ]
+        );
     }
 
     #[test]
@@ -897,10 +901,10 @@ mod tests {
 
         // VM get import module
         assert!(vm
-            .get_import_object(HostRegistration::WasmEdge_HostRegistration_Wasi)
+            .import_object(HostRegistration::WasmEdge_HostRegistration_Wasi)
             .is_some());
         assert!(vm
-            .get_import_object(HostRegistration::WasmEdge_HostRegistration_WasmEdge_Process)
+            .import_object(HostRegistration::WasmEdge_HostRegistration_WasmEdge_Process)
             .is_none());
 
         // VM get store

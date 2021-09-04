@@ -110,6 +110,13 @@ impl Drop for FunctionTypeContext {
         unsafe { we_ffi::WasmEdge_FunctionTypeDelete(self.raw) }
     }
 }
+impl Default for FunctionTypeContext {
+    fn default() -> Self {
+        FunctionTypeContext {
+            raw: std::ptr::null_mut(),
+        }
+    }
+}
 
 pub struct HostFunctionContext {
     pub(crate) raw: *mut we_ffi::WasmEdge_HostFunctionContext,

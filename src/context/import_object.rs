@@ -300,7 +300,7 @@ mod test {
         assert!(result.is_some());
         let vm = result.unwrap();
         assert!(!vm.raw.is_null());
-        let result = vm.get_import_object(HostRegistration::WasmEdge_HostRegistration_Wasi);
+        let result = vm.import_object(HostRegistration::WasmEdge_HostRegistration_Wasi);
         assert!(result.is_some());
         let imp_obj = result.unwrap();
         assert!(!imp_obj.raw.is_null());
@@ -316,8 +316,7 @@ mod test {
         assert!(result.is_some());
         let mut vm = result.unwrap();
         assert!(!vm.raw.is_null());
-        let result =
-            vm.get_import_object(HostRegistration::WasmEdge_HostRegistration_WasmEdge_Process);
+        let result = vm.import_object(HostRegistration::WasmEdge_HostRegistration_WasmEdge_Process);
         assert!(result.is_some());
         let imp_obj = result.unwrap();
         assert!(!imp_obj.raw.is_null());

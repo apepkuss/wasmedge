@@ -62,7 +62,7 @@ fn test_wasmedge_tensorflow() {
     );
 
     {
-        let wasi_module = vm.get_import_object(HostRegistration::WasmEdge_HostRegistration_Wasi);
+        let wasi_module = vm.import_object(HostRegistration::WasmEdge_HostRegistration_Wasi);
         assert!(wasi_module.is_some());
     }
 
