@@ -1,7 +1,5 @@
 use std::ffi::CStr;
-use wasmedge_sys::{
-    WasmEdge_Result, WasmEdge_ResultGetCode, WasmEdge_ResultGetMessage, WasmEdge_ResultOK,
-};
+use wasmedge_sys::{WasmEdge_Result, WasmEdge_ResultGetCode, WasmEdge_ResultGetMessage};
 
 #[derive(Debug)]
 pub struct WasmEdgeError {
@@ -13,14 +11,6 @@ pub struct WasmEdgeError {
     pub code: usize,
     pub message: String,
 }
-// impl WasmEdgeError {
-//     pub fn new<T: std::convert::Into<String>>(code: u32, message: T) -> Self {
-//         WasmEdgeError {
-//             code,
-//             message: message.into(),
-//         }
-//     }
-// }
 impl std::fmt::Display for WasmEdgeError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::result::Result<(), std::fmt::Error> {
         self.message.fmt(f)
