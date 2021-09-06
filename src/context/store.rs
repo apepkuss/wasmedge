@@ -824,8 +824,11 @@ mod tests {
     fn load_module(conf: &ConfigureContext) -> Option<ASTModuleContext> {
         let mut module = ASTModuleContext::default();
         let mut loader = LoaderContext::create(conf)?;
-        loader.parse_from_file(&mut module, TPATH);
-        Some(module)
+        let result = loader.parse_from_file(&mut module, TPATH);
+        match result {
+            Ok(_) => Some(module),
+            Err(_) => None,
+        }
     }
 
     fn validate_module(conf: &ConfigureContext, ast_mod: &ASTModuleContext) -> bool {
