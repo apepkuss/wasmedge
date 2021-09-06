@@ -6,10 +6,8 @@ use crate::{
         memory::MemoryInstanceContext, table::TableInstanceContext,
     },
     types::WasmEdgeString,
-    types::WasmEdgeValue,
-    utils::check,
 };
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::mem;
 use wasmedge_sys::ffi as we_ffi;
@@ -555,14 +553,13 @@ mod tests {
         types::*,
         value::*,
     };
-    use std::ffi::CString;
     use std::ptr;
     use wasmedge_sys::ffi as we_ffi;
 
     const TPATH: &str = "/root/workspace/wasmedge-ml/wasmedge/tests/data/test.wasm";
 
     #[test]
-    fn test_wasmedge_store() {
+    fn test_context_store() {
         // create contexts
         let mut conf = ConfigureContext::create();
         conf.add_host_registration(HostRegistration::WasmEdge_HostRegistration_Wasi);
@@ -584,7 +581,7 @@ mod tests {
         assert_eq!(store.list_module_len(), 0);
 
         // Register host module and instantiate wasm module
-        let res = create_extern_module("extern", false);
+        let res = create_extern_module("extern");
         assert!(res.is_some());
         let imp_obj = res.unwrap();
         assert!(!imp_obj.raw.is_null());
@@ -624,6 +621,7 @@ mod tests {
         assert!(result.is_ok());
         let (len, func_names) = result.unwrap();
         assert_eq!(len, 11);
+        println!("func_names: {:?}", func_names);
 
         // Store find function registered
         assert!(store
@@ -652,6 +650,7 @@ mod tests {
         assert!(result.is_ok());
         let (len, table_names) = result.unwrap();
         assert_eq!(len, 2);
+        println!("table_name: {:?}", table_names);
 
         // Store find table registered
         assert!(store
@@ -687,8 +686,9 @@ mod tests {
         println!("memory_reg_names: {:?}", memory_names);
 
         // Store find memory registered
+        // ! error: caused by invalid utf-8 characters
         // assert!(store
-        //     .find_memory_registered(&mod_name[0], &memory_names[0]) // ! error: caused by invalid utf-8 characters
+        //     .find_memory_registered(&mod_name[0], &memory_names[0])
         //     .is_some());
         assert!(store
             .find_memory_registered(&mod_name[0], &err_name)
@@ -754,7 +754,7 @@ mod tests {
         );
     }
 
-    fn create_extern_module(name: &str, is_wrap: bool) -> Option<ImportObjectContext<'_>> {
+    fn create_extern_module(name: &str) -> Option<ImportObjectContext<'_>> {
         // create import object
         let result = ImportObjectContext::create(name, ptr::null_mut());
         assert!(result.is_some());
@@ -772,76 +772,32 @@ mod tests {
 
         // add host function "func-add"
         let host_name = "func-add";
-        let result = if is_wrap {
-            // WasmEdgeHostFunctionContext::create_binding(
-            //     &host_ftype,
-            //     extern_wrap,
-            //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
-            //     0,
-            // )
-            todo!()
-        } else {
-            HostFunctionContext::create(&host_ftype, Some(extern_add), 0)
-        };
+        let result = HostFunctionContext::create(&host_ftype, Some(extern_add), 0);
         assert!(result.is_some());
         let mut host_func = result.unwrap();
         imp_obj.add_host_function(host_name, &mut host_func);
 
         // add host function "func-sub"
         let host_name = "func-sub";
-        let result = if is_wrap {
-            // WasmEdgeHostFunctionContext::create_binding(
-            //     &host_ftype,
-            //     extern_wrap,
-            //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
-            //     0,
-            // )
-            todo!()
-        } else {
-            HostFunctionContext::create(&host_ftype, Some(extern_sub), 0)
-        };
+        let result = HostFunctionContext::create(&host_ftype, Some(extern_sub), 0);
         assert!(result.is_some());
         let mut host_func = result.unwrap();
         imp_obj.add_host_function(host_name, &mut host_func);
 
         // add host function "func-mul"
         let host_name = "func-mul";
-        let result = if is_wrap {
-            // WasmEdgeHostFunctionContext::create_binding(
-            //     &host_ftype,
-            //     extern_wrap,
-            //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
-            //     0,
-            // )
-            todo!()
-        } else {
-            HostFunctionContext::create(&host_ftype, Some(extern_mul), 0)
-        };
+        let result = HostFunctionContext::create(&host_ftype, Some(extern_mul), 0);
         assert!(result.is_some());
         let mut host_func = result.unwrap();
         imp_obj.add_host_function(host_name, &mut host_func);
 
         // add host function "func-div"
         let host_name = "func-div";
-        let result = if is_wrap {
-            // WasmEdgeHostFunctionContext::create_binding(
-            //     &host_ftype,
-            //     extern_wrap,
-            //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
-            //     0,
-            // )
-            todo!()
-        } else {
-            HostFunctionContext::create(&host_ftype, Some(extern_div), 0)
-        };
+        let result = HostFunctionContext::create(&host_ftype, Some(extern_div), 0);
         assert!(result.is_some());
         let mut host_func = result.unwrap();
         imp_obj.add_host_function(host_name, &mut host_func);
 
-        let params = [
-            WasmEdgeValType::WasmEdge_ValType_ExternRef,
-            WasmEdgeValType::WasmEdge_ValType_I32,
-        ];
         let returns = [WasmEdgeValType::WasmEdge_ValType_I32];
         let result = FunctionTypeContext::create(None, Some(&returns));
         assert!(result.is_some());
@@ -850,34 +806,14 @@ mod tests {
 
         // add host function "func-term"
         let host_name = "func-term";
-        let result = if is_wrap {
-            // WasmEdgeHostFunctionContext::create_binding(
-            //     &host_ftype,
-            //     extern_wrap,
-            //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
-            //     0,
-            // )
-            todo!()
-        } else {
-            HostFunctionContext::create(&host_ftype, Some(extern_term), 0)
-        };
+        let result = HostFunctionContext::create(&host_ftype, Some(extern_term), 0);
         assert!(result.is_some());
         let mut host_func = result.unwrap();
         imp_obj.add_host_function(host_name, &mut host_func);
 
         // add host function "func-fail"
         let host_name = "func-fail";
-        let result = if is_wrap {
-            // WasmEdgeHostFunctionContext::create_binding(
-            //     &host_ftype,
-            //     extern_wrap,
-            //     &extern_add as *mut std::os::raw::c_int as *mut std::os::raw::c_void,
-            //     0,
-            // )
-            todo!()
-        } else {
-            HostFunctionContext::create(&host_ftype, Some(extern_fail), 0)
-        };
+        let result = HostFunctionContext::create(&host_ftype, Some(extern_fail), 0);
         assert!(result.is_some());
         let mut host_func = result.unwrap();
         imp_obj.add_host_function(host_name, &mut host_func);
@@ -896,7 +832,7 @@ mod tests {
         let res = Validator::create(conf);
         match res {
             None => false,
-            Some(mut validator) => {
+            Some(validator) => {
                 let res = validator.validate(ast_mod);
                 match res {
                     Err(_) => false,
@@ -931,8 +867,8 @@ mod tests {
 
     #[no_mangle]
     unsafe extern "C" fn extern_add(
-        data: *mut std::os::raw::c_void,
-        mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+        _data: *mut std::os::raw::c_void,
+        _mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
         params: *const WasmEdgeValue,
         returns: *mut WasmEdgeValue,
     ) -> we_ffi::WasmEdge_Result {
@@ -947,8 +883,8 @@ mod tests {
 
     #[no_mangle]
     unsafe extern "C" fn extern_sub(
-        data: *mut std::os::raw::c_void,
-        mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+        _data: *mut std::os::raw::c_void,
+        _mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
         params: *const WasmEdgeValue,
         returns: *mut WasmEdgeValue,
     ) -> we_ffi::WasmEdge_Result {
@@ -963,8 +899,8 @@ mod tests {
 
     #[no_mangle]
     unsafe extern "C" fn extern_mul(
-        data: *mut std::os::raw::c_void,
-        mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+        _data: *mut std::os::raw::c_void,
+        _mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
         params: *const WasmEdgeValue,
         returns: *mut WasmEdgeValue,
     ) -> we_ffi::WasmEdge_Result {
@@ -979,8 +915,8 @@ mod tests {
 
     #[no_mangle]
     unsafe extern "C" fn extern_div(
-        data: *mut std::os::raw::c_void,
-        mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+        _data: *mut std::os::raw::c_void,
+        _mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
         params: *const WasmEdgeValue,
         returns: *mut WasmEdgeValue,
     ) -> we_ffi::WasmEdge_Result {
@@ -995,9 +931,9 @@ mod tests {
 
     #[no_mangle]
     unsafe extern "C" fn extern_term(
-        data: *mut std::os::raw::c_void,
-        mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
-        params: *const WasmEdgeValue,
+        _data: *mut std::os::raw::c_void,
+        _mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+        _params: *const WasmEdgeValue,
         returns: *mut WasmEdgeValue,
     ) -> we_ffi::WasmEdge_Result {
         let res = WasmEdgeValueGenI32(1234);
@@ -1008,9 +944,9 @@ mod tests {
 
     #[no_mangle]
     unsafe extern "C" fn extern_fail(
-        data: *mut std::os::raw::c_void,
-        mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
-        params: *const WasmEdgeValue,
+        _data: *mut std::os::raw::c_void,
+        _mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+        _params: *const WasmEdgeValue,
         returns: *mut WasmEdgeValue,
     ) -> we_ffi::WasmEdge_Result {
         let res = WasmEdgeValueGenI32(5678);
