@@ -140,6 +140,7 @@ impl Drop for HostFunctionContext {
     }
 }
 
+#[allow(dead_code)]
 pub struct FunctionInstanceContext {
     pub(crate) raw: *mut we_ffi::WasmEdge_FunctionInstanceContext,
 }
@@ -147,17 +148,15 @@ pub struct FunctionInstanceContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        context::import_object::ImportObjectContext, context::vm::VMContext, types::*, value::*,
-    };
+    use crate::{context::import_object::ImportObjectContext, context::vm::VMContext, value::*};
     use std::mem;
 
     #[test]
-    fn test_wasmedge_host_function() {
+    fn test_instance_function_host_function() {
         #[no_mangle]
         unsafe extern "C" fn Add(
-            data: *mut std::os::raw::c_void,
-            mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+            _data: *mut std::os::raw::c_void,
+            _mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
             params: *const WasmEdgeValue,
             returns: *mut WasmEdgeValue,
         ) -> we_ffi::WasmEdge_Result {
@@ -232,21 +231,19 @@ mod tests {
         let result = vm.function_type("addTwo");
         assert!(result.is_some());
         let func_type = result.unwrap();
+        assert_eq!(1, func_type.returns_len());
+        assert_eq!(2, func_type.parameters_len());
 
-        println!("len of returns: {}", func_type.returns_len());
-        println!("len of params: {}", func_type.parameters_len());
-
-        // let mut list: Vec<WasmEdgeValType> = vec![];
-        let mut out: [mem::MaybeUninit<WasmEdgeValType>; 1] = mem::MaybeUninit::uninit_array();
-        let result = func_type.returns(&mut out);
-        let (size, list) = result.unwrap();
-        println!("size of returns: {}", size);
-        println!("len of list: {}", list.len());
-        println!("result value: {:?}", list[0]);
+        let mut buf: [mem::MaybeUninit<WasmEdgeValType>; 1] = mem::MaybeUninit::uninit_array();
+        let result = func_type.returns(&mut buf);
+        assert!(result.is_ok());
+        let (size, returns_type) = result.unwrap();
+        assert_eq!(1, size);
+        assert_eq!(WasmEdgeValType::WasmEdge_ValType_I32, returns_type[0]);
     }
 
     #[test]
-    fn test_wasmedge_function_type() {
+    fn test_instance_function_function_type() {
         let params = vec![
             WasmEdgeValType::WasmEdge_ValType_I32,
             WasmEdgeValType::WasmEdge_ValType_I64,
