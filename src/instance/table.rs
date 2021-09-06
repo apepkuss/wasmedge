@@ -3,7 +3,6 @@ use crate::error::WasmEdgeResult;
 use crate::types::*;
 use crate::utils::check;
 use std::marker::PhantomData;
-use std::mem;
 use wasmedge_sys::ffi as we_ffi;
 
 pub struct TableInstanceContext<'store, 'vm: 'store> {
@@ -122,7 +121,8 @@ mod tests {
         let x = WasmEdgeValueGetExternRef(val) as *const TableInstanceContext;
         let y = &tab_ctx as *const TableInstanceContext;
         assert!(std::ptr::eq(x, y));
-        // let result = tab_ctx.get_data(&mut val, 15); // ! error: execution failed: out of bounds table access, Code: 0x87
+        // ! error: execution failed: out of bounds table access, Code: 0x87
+        // let result = tab_ctx.get_data(&mut val, 15);
         // assert!(result.is_err());
 
         // Table instance get size and grow
