@@ -439,9 +439,9 @@ mod tests {
         // let result = vm.register_module_from_ast("reg-wasm-ast", &ast_mod);
         // assert!(result.is_err());
 
-        let mod_name = "reg-wasm-buffer";
+        // let mod_name = "reg-wasm-buffer";
         let func_name = "func-mul-2";
-        let func_name2 = "func-mul-3";
+        // let func_name2 = "func-mul-3";
         // VM run wasm from file
         let params = [WasmEdgeValueGenI32(123), WasmEdgeValueGenI32(456)];
         let mut buf = mem::MaybeUninit::<WasmEdgeValue>::uninit_array::<2>();
@@ -680,9 +680,9 @@ mod tests {
         assert!(result.is_ok());
 
         let mod_name = "reg-wasm-buffer";
-        let mod_name2 = "reg-wasm-error";
+        // let mod_name2 = "reg-wasm-error";
         let func_name = "func-mul-2";
-        let func_name2 = "func-mul-3";
+        // let func_name2 = "func-mul-3";
 
         // VM register module from buffer
         let result = vm.register_module_from_buffer(mod_name, &mod_buf);
@@ -933,10 +933,6 @@ mod tests {
         let mut host_func = result.unwrap();
         imp_obj.add_host_function(host_name, &mut host_func);
 
-        let params = [
-            WasmEdgeValType::WasmEdge_ValType_ExternRef,
-            WasmEdgeValType::WasmEdge_ValType_I32,
-        ];
         let returns = [WasmEdgeValType::WasmEdge_ValType_I32];
         let result = FunctionTypeContext::create(None, Some(&returns));
         assert!(result.is_some());
