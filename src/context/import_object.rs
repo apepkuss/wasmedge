@@ -187,8 +187,6 @@ mod test {
     use crate::instance::function::*;
     use crate::types::*;
     use crate::value::*;
-    use std::ffi::CString;
-    use std::os::raw::c_void;
     use std::ptr;
 
     #[test]
@@ -314,7 +312,7 @@ mod test {
         conf.add_host_registration(HostRegistration::WasmEdge_HostRegistration_WasmEdge_Process);
         let result = VMContext::create(Some(&conf), None);
         assert!(result.is_some());
-        let mut vm = result.unwrap();
+        let vm = result.unwrap();
         assert!(!vm.raw.is_null());
         let result = vm.import_object(HostRegistration::WasmEdge_HostRegistration_WasmEdge_Process);
         assert!(result.is_some());
@@ -324,8 +322,8 @@ mod test {
 
     #[no_mangle]
     unsafe extern "C" fn extern_add_impobj(
-        data: *mut std::os::raw::c_void,
-        mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+        _data: *mut std::os::raw::c_void,
+        _mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
         params: *const WasmEdgeValue,
         returns: *mut WasmEdgeValue,
     ) -> we_ffi::WasmEdge_Result {
@@ -340,8 +338,8 @@ mod test {
 
     #[no_mangle]
     unsafe extern "C" fn extern_sub_impobj(
-        data: *mut std::os::raw::c_void,
-        mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+        _data: *mut std::os::raw::c_void,
+        _mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
         params: *const WasmEdgeValue,
         returns: *mut WasmEdgeValue,
     ) -> we_ffi::WasmEdge_Result {
@@ -356,8 +354,8 @@ mod test {
 
     #[no_mangle]
     unsafe extern "C" fn extern_mul_impobj(
-        data: *mut std::os::raw::c_void,
-        mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+        _data: *mut std::os::raw::c_void,
+        _mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
         params: *const WasmEdgeValue,
         returns: *mut WasmEdgeValue,
     ) -> we_ffi::WasmEdge_Result {
@@ -372,8 +370,8 @@ mod test {
 
     #[no_mangle]
     unsafe extern "C" fn extern_div_impobj(
-        data: *mut std::os::raw::c_void,
-        mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+        _data: *mut std::os::raw::c_void,
+        _mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
         params: *const WasmEdgeValue,
         returns: *mut WasmEdgeValue,
     ) -> we_ffi::WasmEdge_Result {
@@ -388,9 +386,9 @@ mod test {
 
     #[no_mangle]
     unsafe extern "C" fn extern_term_impobj(
-        data: *mut std::os::raw::c_void,
-        mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
-        params: *const WasmEdgeValue,
+        _data: *mut std::os::raw::c_void,
+        _mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+        _params: *const WasmEdgeValue,
         returns: *mut WasmEdgeValue,
     ) -> we_ffi::WasmEdge_Result {
         let res = WasmEdgeValueGenI32(1234);
@@ -401,9 +399,9 @@ mod test {
 
     #[no_mangle]
     unsafe extern "C" fn extern_fail_impobj(
-        data: *mut std::os::raw::c_void,
-        mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
-        params: *const WasmEdgeValue,
+        _data: *mut std::os::raw::c_void,
+        _mem_ctx: *mut we_ffi::WasmEdge_MemoryInstanceContext,
+        _params: *const WasmEdgeValue,
         returns: *mut WasmEdgeValue,
     ) -> we_ffi::WasmEdge_Result {
         let res = WasmEdgeValueGenI32(5678);
