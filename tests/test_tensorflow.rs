@@ -170,28 +170,28 @@ fn test_wasmedge_run_wasm() {
     assert_eq!(values.len(), 1);
     assert_eq!(WasmEdgeValueGetI32(values[0]), 10);
 
-    {
-        // run consume_add function in using_add.wasm
-        let buf = std::fs::read("/root/workspace/wasmedge-ml/docs/add.pb").unwrap();
-        let buf2 = std::fs::read("/root/workspace/mtcnn/mtcnn.pb").unwrap();
-        let vec = [&buf];
-        let ptr = vec.as_ptr();
-        println!("ptr: {:?}", ptr);
+    // {
+    //     // run consume_add function in using_add.wasm
+    //     let buf = std::fs::read("/root/workspace/wasmedge-ml/docs/add.pb").unwrap();
+    //     let _buf2 = std::fs::read("/root/workspace/mtcnn/mtcnn.pb").unwrap();
+    //     let vec = [&buf];
+    //     let ptr = vec.as_ptr();
+    //     println!("ptr: {:?}", ptr);
 
-        // let xml = std::fs::read_to_string("fixture/model.xml")
-        //     .unwrap()
-        //     .into_bytes();
-        // let weights = std::fs::read("fixture/model.bin").unwrap();
-        // let x = &[&xml, &weights];
+    //     // let xml = std::fs::read_to_string("fixture/model.xml")
+    //     //     .unwrap()
+    //     //     .into_bytes();
+    //     // let weights = std::fs::read("fixture/model.bin").unwrap();
+    //     // let x = &[&xml, &weights];
 
-        let func_name = "consume_load";
-        let params = vec![WasmEdgeValueGenI64(ptr as i64), WasmEdgeValueGenI32(1)];
-        let mut out: [mem::MaybeUninit<WasmEdgeValue>; 1] = mem::MaybeUninit::uninit_array();
-        let result = vm.execute_registered(mod_name, func_name, params.as_slice(), &mut out);
-        assert!(result.is_ok());
+    //     let func_name = "consume_load";
+    //     let params = vec![WasmEdgeValueGenI64(ptr as i64), WasmEdgeValueGenI32(1)];
+    //     let mut out: [mem::MaybeUninit<WasmEdgeValue>; 1] = mem::MaybeUninit::uninit_array();
+    //     let result = vm.execute_registered(mod_name, func_name, params.as_slice(), &mut out);
+    //     assert!(result.is_ok());
 
-        // let values = result.unwrap();
-        // assert_eq!(values.len(), 1);
-        // assert_eq!(WasmEdgeValueGetI32(values[0]), 10);
-    }
+    //     // let values = result.unwrap();
+    //     // assert_eq!(values.len(), 1);
+    //     // assert_eq!(WasmEdgeValueGetI32(values[0]), 10);
+    // }
 }
