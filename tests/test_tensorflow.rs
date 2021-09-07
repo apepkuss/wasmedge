@@ -61,17 +61,9 @@ fn test_wasmedge_tensorflow() {
         param_len
     );
 
-    {
-        let wasi_module = vm.import_object(HostRegistration::WasmEdge_HostRegistration_Wasi);
-        assert!(wasi_module.is_some());
-    }
-
     // get import-objects
-    // let wasi_mod =
-    //     vm_ctx.import_module_mut(WasmEdgeHostRegistration::WasmEdge_HostRegistration_Wasi);
-    // let proc_mod = vm_ctx.import_module_mut(
-    //     WasmEdgeHostRegistration::WasmEdge_HostRegistration_WasmEdge_Process,
-    // );
+    let wasi_mod = vm.import_object(HostRegistration::WasmEdge_HostRegistration_Wasi);
+    let proc_mod = vm.import_object(HostRegistration::WasmEdge_HostRegistration_WasmEdge_Process);
 
     // // init wasi_mod
     // let args = vec!["using_add.wasm"];
@@ -86,11 +78,11 @@ fn test_wasmedge_tensorflow() {
     // );
 
     // register wasmedge-wasi-nn module
-    let result = vm.register_module_from_file(
-            "calculator",
-            "/root/workspace/wasmedge-ml/wasmedge-wasi-nn/target/wasm32-wasi/debug/wasmedge_wasi_nn.wasm",
-        );
-    assert!(result.is_ok());
+    // let result = vm.register_module_from_file(
+    //         "calculator",
+    //         "/root/workspace/wasmedge-ml/wasmedge-wasi-nn/target/wasm32-wasi/debug/wasmedge_wasi_nn.wasm",
+    //     );
+    // assert!(result.is_ok());
 
     // // load tensorflow model
     // let buf = std::fs::read("/root/workspace/wasmedge-ml/docs/add.pb").unwrap();
@@ -145,30 +137,30 @@ fn test_wasmedge_run_wasm() {
     assert!(result.is_some());
 
     // register wasmedge_wasi_nn.wasm module
-    let res = vm.register_module_from_file(
+    let result = vm.register_module_from_file(
         "calculator",
         "/root/workspace/wasmedge-ml/wasmedge-wasi-nn/target/wasm32-wasi/debug/wasmedge_wasi_nn.wasm",
     );
-    assert!(res.is_ok());
-
-    // register using_add.wasm module
-    let mod_name = "using_add";
-    let result = vm.register_module_from_file(
-        mod_name,
-        "/root/workspace/examples/using_add/target/wasm32-wasi/debug/using_add.wasm",
-    );
     assert!(result.is_ok());
 
-    // call consume_add function in registered using_add.wasm module
-    let func_name = "consume_add";
-    let params = vec![WasmEdgeValueGenI32(2), WasmEdgeValueGenI32(8)];
-    let mut out: [mem::MaybeUninit<WasmEdgeValue>; 1] = mem::MaybeUninit::uninit_array();
-    let result = vm.execute_registered(mod_name, func_name, params.as_slice(), &mut out);
-    assert!(result.is_ok());
+    // // register using_add.wasm module
+    // let mod_name = "using_add";
+    // let result = vm.register_module_from_file(
+    //     mod_name,
+    //     "/root/workspace/examples/using_add/target/wasm32-wasi/debug/using_add.wasm",
+    // );
+    // assert!(result.is_ok());
 
-    let values = result.unwrap();
-    assert_eq!(values.len(), 1);
-    assert_eq!(WasmEdgeValueGetI32(values[0]), 10);
+    // // call consume_add function in registered using_add.wasm module
+    // let func_name = "consume_add";
+    // let params = vec![WasmEdgeValueGenI32(2), WasmEdgeValueGenI32(8)];
+    // let mut out: [mem::MaybeUninit<WasmEdgeValue>; 1] = mem::MaybeUninit::uninit_array();
+    // let result = vm.execute_registered(mod_name, func_name, params.as_slice(), &mut out);
+    // assert!(result.is_ok());
+
+    // let values = result.unwrap();
+    // assert_eq!(values.len(), 1);
+    // assert_eq!(WasmEdgeValueGetI32(values[0]), 10);
 
     // {
     //     // run consume_add function in using_add.wasm
